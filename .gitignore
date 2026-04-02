@@ -1,5 +1,28 @@
-#environment file
-.env
-
-#environment file
+# Python
 venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Rust
+contracts/*/target/
+**/*.rs.bk
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+
+# IDEs
+.vscode/
+.idea/
+
+# System
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/

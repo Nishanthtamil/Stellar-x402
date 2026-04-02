@@ -1,0 +1,14 @@
+/home/nishanth/Stellarpay/contracts/registry/target/release/deps/serde-cf9e2dd284385b46.d: /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/nishanth/Stellarpay/contracts/registry/target/release/build/serde-d616f9ef80b6eb9b/out/private.rs
+
+/home/nishanth/Stellarpay/contracts/registry/target/release/deps/libserde-cf9e2dd284385b46.rlib: /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/nishanth/Stellarpay/contracts/registry/target/release/build/serde-d616f9ef80b6eb9b/out/private.rs
+
+/home/nishanth/Stellarpay/contracts/registry/target/release/deps/libserde-cf9e2dd284385b46.rmeta: /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/nishanth/Stellarpay/contracts/registry/target/release/build/serde-d616f9ef80b6eb9b/out/private.rs
+
+/home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/home/nishanth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/home/nishanth/Stellarpay/contracts/registry/target/release/build/serde-d616f9ef80b6eb9b/out/private.rs:
+
+# env-dep:OUT_DIR=/home/nishanth/Stellarpay/contracts/registry/target/release/build/serde-d616f9ef80b6eb9b/out
