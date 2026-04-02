@@ -1,1 +1,0 @@
-/home/nishanth/Stellarpay/contracts/registry/target/wasm32-unknown-unknown/release/stellarpay_registry.wasm: /home/nishanth/Stellarpay/contracts/registry/src/lib.rs /home/nishanth/Stellarpay/contracts/registry/src/test.rs
