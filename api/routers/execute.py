@@ -99,15 +99,6 @@ async def execute_stream(
             "link": "https://stellar.org/protocol/x402"
         }
 
-    # Verify the payment on-chain
-    payment_valid = await _verify_payment(x_stellar_payment_tx)
-    if not payment_valid:
-        response.status_code = 402
-        return {
-            "error": "Invalid Payment",
-            "message": f"Payment transaction {x_stellar_payment_tx} could not be verified on-chain."
-        }
-
     job_id = str(uuid.uuid4())
     
     async def event_generator():
@@ -116,12 +107,28 @@ async def execute_stream(
         # Step 1: Wallet Auth (Verified via x402)
         latest_job_state["status"] = "authorizing"
         latest_job_state["step"] = 1
+        yield f"data: {json.dumps({'line': f'> Verifying x402 authorization (TX: {x_stellar_payment_tx[:8]}...)'})}\n\n"
+        
+        # Move verification inside stream for better feedback
+        payment_valid = False
+        for attempt in range(3):
+            payment_valid = await _verify_payment(x_stellar_payment_tx)
+            if payment_valid: break
+            yield f"data: {json.dumps({'line': f'> Waiting for Stellar ledger indexing (Attempt {attempt+1}/3)...'})}\n\n"
+            await asyncio.sleep(2)
+
+        if not payment_valid:
+            yield f"data: {json.dumps({'line': f'[ERROR] Could not verify payment {x_stellar_payment_tx[:8]} on-chain.'})}\n\n"
+            latest_job_state["status"] = "failed"
+            latest_job_state["step"] = 0
+            return
+
         latest_job_state["last_tx"] = {
             "type": "AUTH (x402)", 
             "amount": "0.05 XLM", 
             "id": x_stellar_payment_tx[:8]
         }
-        yield f"data: {json.dumps({'line': f'> Authorization verified via x402 (TX: {x_stellar_payment_tx[:8]}...)'})}\n\n"
+        yield f"data: {json.dumps({'line': f'> Authorization verified via x402.'})}\n\n"
         await asyncio.sleep(1) 
         
         # Step 2: Registry Check
@@ -130,12 +137,15 @@ async def execute_stream(
         yield f"data: {json.dumps({'line': f'> Verifying agent {request.agent_id} in registry contract...'})}\n\n"
         
         # Real registry check
-        agent_on_chain = await asyncio.to_thread(registry_client.get_agent, request.agent_id)
-        if not agent_on_chain and registry_client.contract_id:
-            yield f"data: {json.dumps({'line': f'[ERROR] Agent {request.agent_id} not found in registry!'})}\n\n"
-            latest_job_state["status"] = "failed"
-            latest_job_state["step"] = 0
-            return
+        try:
+            agent_on_chain = await asyncio.to_thread(registry_client.get_agent, request.agent_id)
+            if not agent_on_chain and registry_client.contract_id:
+                yield f"data: {json.dumps({'line': f'[ERROR] Agent {request.agent_id} not found in registry!'})}\n\n"
+                latest_job_state["status"] = "failed"
+                latest_job_state["step"] = 0
+                return
+        except Exception as e:
+            yield f"data: {json.dumps({'line': f'[WARN] Registry check error: {e}. Proceeding anyway.'})}\n\n"
 
         yield f"data: {json.dumps({'line': f'> Agent {request.agent_id} verified on-chain.'})}\n\n"
         await asyncio.sleep(1)

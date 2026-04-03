@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stellarpay Executor | Advanced Dashboard v1.0.1</title>
-    <!-- Version Marker: 1.0.1 -->
+    <title>Stellarpay Executor | Advanced Dashboard v1.0.2</title>
+    <!-- Version Marker: 1.0.2 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -496,6 +496,10 @@
                                 if (data.line) {
                                     if (data.line.includes('Authorization verified')) {
                                         appendTX('AUTH (x402)', '0.05 XLM', 'auth_' + Math.random().toString(36).substring(7));
+                                    }
+                                    if (data.line.includes('Waiting for Stellar ledger')) {
+                                        statusBadge.textContent = 'Indexing...';
+                                        statusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] bg-amber-900 text-amber-400 font-bold uppercase tracking-tighter animate-pulse';
                                     }
                                     if (data.line.includes('Signing execution result')) {
                                         appendTX('SIGN', '0.00000 XLM', 'sig_' + Math.random().toString(36).substring(7));
