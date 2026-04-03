@@ -127,7 +127,7 @@ pub struct Agent {
    *The dashboard will automatically open at `http://127.0.0.1:8000`*
 
 4. **Explore Agent Vault**:
-   Access the real-time virtual flow and blockchain ledger at `http://127.0.0.1:8000/vault`.
+   Open `http://127.0.0.1:8000` and choose **Agent Vault** in the sidebar for the pipeline view and on-chain ledger.
 
 ---
 

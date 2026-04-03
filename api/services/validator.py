@@ -2,14 +2,18 @@ import os
 import json
 from dataclasses import dataclass
 from typing import Any, Iterable
-import google.generativeai as genai
 
 from api.models.job import ValidationStrategy
 
-# Configure Gemini if key is present
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
+
+def _req_get(requirements: dict[str, Any], key: str) -> Any:
+    """Resolve fields from top-level JobRequest or nested ``input`` (dashboard / API payloads)."""
+    if requirements.get(key) is not None:
+        return requirements[key]
+    inner = requirements.get("input")
+    if isinstance(inner, dict):
+        return inner.get(key)
+    return None
 
 @dataclass
 class ValidationOutcome:
@@ -37,7 +41,9 @@ def _ai_validate(output: str, requirements: dict[str, Any]) -> ValidationOutcome
             strategy=ValidationStrategy.RULE_BASED,
             reason="AI validation skipped (no API key). Passed baseline rule-based validation.",
         )
-    
+
+    import google.generativeai as genai
+
     genai.configure(api_key=gemini_key)
     task_desc = requirements.get("task", "unknown task")
     prompt = f"""
@@ -100,7 +106,7 @@ def validate_execution_output(output: str, requirements: dict[str, Any]) -> Vali
             reason="Execution emitted runtime error markers.",
         )
 
-    expected_output = requirements.get("expected_output")
+    expected_output = _req_get(requirements, "expected_output")
     if expected_output is not None:
         verified = normalized_output == str(expected_output).strip()
         reason = "Output exactly matched the expected output." if verified else "Output did not exactly match the expected output."
@@ -110,7 +116,7 @@ def validate_execution_output(output: str, requirements: dict[str, Any]) -> Vali
             reason=reason,
         )
 
-    expected_substring = requirements.get("expected_substring")
+    expected_substring = _req_get(requirements, "expected_substring")
     if expected_substring:
         verified = str(expected_substring) in normalized_output
         reason = "Output contained the required substring." if verified else "Output did not contain the required substring."
@@ -120,7 +126,11 @@ def validate_execution_output(output: str, requirements: dict[str, Any]) -> Vali
             reason=reason,
         )
 
-    forbidden_substrings = requirements.get("forbidden_substrings") or []
+    forbidden_substrings = (
+        _req_get(requirements, "forbidden_substrings") or []
+    )
+    if not isinstance(forbidden_substrings, list):
+        forbidden_substrings = [forbidden_substrings]
     if any(str(item) in normalized_output for item in forbidden_substrings):
         return ValidationOutcome(
             verified=False,

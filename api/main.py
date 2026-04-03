@@ -9,6 +9,7 @@ if __package__ in (None, ""):
     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from stellar_sdk import Server
@@ -18,6 +19,7 @@ load_dotenv()
 
 from api.routers import execute
 from api.services.registry_client import registry_client
+from api.services.activity_log import push_event, get_events, clear_events
 import json
 import asyncio
 
@@ -81,11 +83,48 @@ async def process_payment():
         kp = Keypair.from_secret(deployer_secret)
         tx.sign(kp)
         response = await asyncio.to_thread(server.submit_transaction, tx)
-        
-        return {"hash": response["hash"], "status": "success"}
+        tx_hash = response.get("hash") or response.get("id")
+        if not tx_hash:
+            return {"error": "No transaction hash in Horizon response", "raw_keys": list(response.keys())}
+
+        push_event(
+            kind="payment",
+            severity="success",
+            title="x402 payment (0.05 XLM)",
+            detail=f"Deployer → Executor · {tx_hash[:12]}…",
+            hash_short=tx_hash[:8],
+            hash_full=tx_hash,
+            amount_xlm="0.05",
+            deployer_delta="-0.05",
+            executor_delta="+0.05",
+        )
+        return {"hash": tx_hash, "status": "success", "amount": "0.05"}
     except Exception as e:
         print(f"Payment error: {e}")
+        push_event(
+            kind="payment",
+            severity="error",
+            title="Payment failed",
+            detail=str(e),
+        )
         return {"error": str(e)}
+
+@app.get("/api/activity")
+async def list_activity():
+    return {"events": get_events()}
+
+
+class ActivityClearBody(BaseModel):
+    confirm: bool = False
+
+
+@app.post("/api/activity/clear")
+async def clear_activity(body: ActivityClearBody):
+    if not body.confirm:
+        raise HTTPException(status_code=400, detail="Send {confirm: true} to clear the feed")
+    clear_events()
+    return {"ok": True}
+
 
 @app.get("/api/vault")
 async def get_vault_data():
@@ -131,24 +170,30 @@ async def get_vault_data():
     except Exception as e:
         print(f"Error fetching agent from registry: {e}")
     
+    def _sync_wallet_slice(name: str, public_key: str):
+        acc = server.accounts().account_id(public_key).call()
+        balance = next((b["balance"] for b in acc["balances"] if b["asset_type"] == "native"), "0")
+        wallet = {"name": name, "public_key": public_key, "balance": balance}
+        txs = server.transactions().for_account(public_key).limit(5).order(desc=True).call()
+        rows = []
+        for tx in txs["_embedded"]["records"]:
+            rows.append({
+                "account": name,
+                "hash": tx["hash"][:8] + "...",
+                "hash_full": tx["hash"],
+                "created_at": tx["created_at"],
+                "fee": f"{int(tx['fee_charged']) / 10000000} XLM",
+                "success": tx["successful"],
+            })
+        return wallet, rows
+
     for name, pk in [("Deployer", deployer_pk), ("Executor", executor_pk)]:
-        if not pk: continue
+        if not pk:
+            continue
         try:
-            acc = server.accounts().account_id(pk).call()
-            balance = next((b["balance"] for b in acc["balances"] if b["asset_type"] == "native"), "0")
-            data["wallets"].append({"name": name, "public_key": pk, "balance": balance})
-            
-            # Get last 5 transactions
-            txs = server.transactions().for_account(pk).limit(5).order(desc=True).call()
-            for tx in txs["_embedded"]["records"]:
-                data["transactions"].append({
-                    "account": name,
-                    "hash": tx["hash"][:8] + "...",
-                    "hash_full": tx["hash"],
-                    "created_at": tx["created_at"],
-                    "fee": f"{int(tx['fee_charged']) / 10000000} XLM",
-                    "success": tx["successful"]
-                })
+            wallet, rows = await asyncio.to_thread(_sync_wallet_slice, name, pk)
+            data["wallets"].append(wallet)
+            data["transactions"].extend(rows)
         except Exception as e:
             print(f"Error fetching {name}: {e}")
             
