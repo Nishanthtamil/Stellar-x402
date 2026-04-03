@@ -44,17 +44,26 @@ async def _verify_payment(tx_hash: str) -> bool:
         executor_pk = os.getenv("EXECUTOR_PUBLIC_KEY")
         server = Server(horizon_url)
         
-        # Check if transaction exists and is successful
-        tx = await asyncio.to_thread(server.transactions().transaction(tx_hash).call)
+        # Check if transaction exists and is successful (with 10s timeout)
+        tx = await asyncio.wait_for(
+            asyncio.to_thread(server.transactions().transaction(tx_hash).call),
+            timeout=10.0
+        )
         if not tx.get("successful", False):
             return False
 
         # Verify it contains a payment of 0.05 XLM to our executor
-        ops = await asyncio.to_thread(server.operations().for_transaction(tx_hash).call)
+        ops = await asyncio.wait_for(
+            asyncio.to_thread(server.operations().for_transaction(tx_hash).call),
+            timeout=10.0
+        )
         for op in ops["_embedded"]["records"]:
             if op["type"] == "payment" and op["to"] == executor_pk:
                 if float(op["amount"]) >= 0.05:
                     return True
+        return False
+    except asyncio.TimeoutError:
+        print(f"Payment verification timed out for TX: {tx_hash}")
         return False
     except Exception as e:
         print(f"Payment verification error: {e}")

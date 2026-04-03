@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stellarpay Executor | Advanced Dashboard</title>
+    <title>Stellarpay Executor | Advanced Dashboard v1.0.1</title>
+    <!-- Version Marker: 1.0.1 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -439,15 +440,12 @@
                 if (response.status === 402) {
                     appendLog('> Received 402 Payment Required. Initiating real-time x402 payment...');
                     
-                    // Call our new payment endpoint to perform a real on-chain transaction
                     const payRes = await fetch('/api/pay', { method: 'POST' });
                     const payData = await payRes.json();
                     
                     if (payData.hash) {
                         const txHash = payData.hash;
                         appendLog(`> x402 Payment successful! TX: ${txHash.slice(0, 8)}...`);
-                        
-                        // Wait a bit for Horizon to index the transaction
                         await new Promise(r => setTimeout(r, 2000));
                         
                         response = await fetch('/execute/stream', {
@@ -468,6 +466,17 @@
                         appendLog(`[FATAL] Payment failed: ${payData.error || 'Unknown error'}`);
                         return;
                     }
+                }
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    appendLog(`[FATAL] Execution failed (${response.status}): ${errorData.message || errorData.error || 'Unknown error'}`);
+                    return;
+                }
+
+                if (!response.body) {
+                    appendLog('[FATAL] No response body received from executor.');
+                    return;
                 }
 
                 const reader = response.body.getReader();
