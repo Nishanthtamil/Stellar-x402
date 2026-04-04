@@ -3,559 +3,218 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StellarX-402 | Neural Executor</title>
+    <title>Stellarpay Executor | Advanced Dashboard v1.0.2</title>
+    <!-- Version Marker: 1.0.2 -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@300;500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        :root {
-            --boot-p: 0;
-            --neon-cyan: #22d3ee;
-            --neon-violet: #a78bfa;
-            --neon-amber: #fbbf24;
-            --void: #030712;
-            --glass: rgba(15, 23, 42, 0.55);
-        }
-        * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            min-height: 100vh;
-            background: var(--void);
-            color: #e2e8f0;
-            font-family: 'Outfit', system-ui, sans-serif;
-            overflow-x: hidden;
-        }
-        body.ready #boot-layer { pointer-events: none; opacity: 0; transition: opacity 0.8s ease; }
-        #bg-canvas {
-            position: fixed;
-            inset: 0;
-            z-index: 0;
-            pointer-events: none;
-        }
-        .app-root { position: relative; z-index: 1; }
-
-        /* Animated ambient mesh (behind WebGL) */
-        .mesh-bg {
-            position: fixed;
-            inset: 0;
-            z-index: 0;
-            pointer-events: none;
-            background:
-                radial-gradient(ellipse 100% 55% at 5% -5%, rgba(34, 211, 238, 0.22), transparent 58%),
-                radial-gradient(ellipse 90% 50% at 100% 0%, rgba(167, 139, 250, 0.2), transparent 52%),
-                radial-gradient(ellipse 80% 50% at 50% 105%, rgba(99, 102, 241, 0.14), transparent 55%),
-                radial-gradient(circle at 80% 60%, rgba(251, 191, 36, 0.06), transparent 40%);
-            animation: mesh-breathe 16s ease-in-out infinite alternate;
-        }
-        @keyframes mesh-breathe {
-            0% { opacity: 1; filter: hue-rotate(0deg) saturate(1); }
-            100% { opacity: 0.88; filter: hue-rotate(35deg) saturate(1.15); }
-        }
-
-        /* Boot layer */
-        #boot-layer {
-            position: fixed;
-            inset: 0;
-            z-index: 100;
-            background:
-                radial-gradient(ellipse 100% 80% at 50% 120%, rgba(34, 211, 238, 0.12), transparent 50%),
-                radial-gradient(ellipse 120% 80% at 50% 100%, #0c1929 0%, #030712 55%, #000 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: opacity 0.8s ease;
-        }
-        .boot-inner {
-            text-align: center;
-            max-width: 420px;
-            padding: 2rem;
-            position: relative;
-        }
-        .boot-inner::before {
-            content: '';
-            position: absolute;
-            left: 50%;
-            top: 38%;
-            width: 200px;
-            height: 200px;
-            transform: translate(-50%, -50%);
-            background: radial-gradient(circle, rgba(34, 211, 238, 0.25), transparent 65%);
-            animation: boot-aura 2.5s ease-in-out infinite;
-            pointer-events: none;
-        }
-        @keyframes boot-aura {
-            0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
-            50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
-        }
-        .boot-logo-wrap {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 2rem;
-            position: relative;
-            z-index: 1;
-        }
-        .boot-logo-wrap svg {
-            width: 96px;
-            height: 96px;
-            opacity: calc(var(--boot-p) / 100);
-            transform: translateY(calc(20px * (1 - var(--boot-p) / 100)));
-            filter: blur(calc(10px * (1 - var(--boot-p) / 100))) drop-shadow(0 0 calc(20px * var(--boot-p) / 100) rgba(34, 211, 238, 0.75));
-        }
-        .boot-label {
-            font-size: 0.7rem;
-            letter-spacing: 0.35em;
-            text-transform: uppercase;
-            color: rgba(148, 163, 184, 0.9);
-            margin-bottom: 0.75rem;
-            font-weight: 600;
-            position: relative;
-            z-index: 1;
-        }
-        .boot-bar-wrap {
-            height: 6px;
-            border-radius: 999px;
-            background: rgba(30, 41, 59, 0.9);
-            overflow: hidden;
-            border: 1px solid rgba(51, 65, 85, 0.6);
-            margin-bottom: 0.5rem;
-            position: relative;
-            z-index: 1;
-        }
-        #boot-progress-fill {
-            height: 100%;
-            width: calc(var(--boot-p) * 1%);
-            background: linear-gradient(90deg, var(--neon-violet), var(--neon-cyan), var(--neon-amber));
-            background-size: 200% 100%;
-            animation: shimmer 1.2s linear infinite;
-            border-radius: 999px;
-            box-shadow: 0 0 20px rgba(34, 211, 238, 0.5);
-        }
-        @keyframes shimmer { to { background-position: 200% 0; } }
-        #boot-pct {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 1.75rem;
-            font-weight: 700;
-            background: linear-gradient(90deg, #fff, var(--neon-cyan));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            position: relative;
-            z-index: 1;
-        }
-        .boot-sub { font-size: 0.75rem; color: #64748b; margin-top: 0.5rem; position: relative; z-index: 1; }
-
-        .glass-panel {
-            background: linear-gradient(155deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.42));
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(34, 211, 238, 0.2);
-            border-radius: 1.25rem;
-            box-shadow:
-                0 0 0 1px rgba(34, 211, 238, 0.06) inset,
-                0 8px 48px rgba(0, 0, 0, 0.45),
-                0 0 80px rgba(34, 211, 238, 0.05);
-        }
-        .sidebar-neon {
-            box-shadow: 4px 0 48px rgba(34, 211, 238, 0.08), inset -1px 0 0 rgba(34, 211, 238, 0.15);
-        }
-        .logo-orbit {
-            animation: logo-glow 3.2s ease-in-out infinite;
-        }
-        @keyframes logo-glow {
-            0%, 100% { box-shadow: 0 0 20px rgba(34, 211, 238, 0.45), 0 0 40px rgba(99, 102, 241, 0.2); }
-            50% { box-shadow: 0 0 28px rgba(167, 139, 250, 0.55), 0 0 56px rgba(34, 211, 238, 0.25); }
-        }
-        .title-glow {
-            background: linear-gradient(100deg, #f1f5f9 0%, #22d3ee 35%, #a78bfa 65%, #f1f5f9 100%);
-            background-size: 220% auto;
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            animation: title-sheen 7s linear infinite;
-        }
-        @keyframes title-sheen { to { background-position: 220% center; } }
-        .header-bar {
-            box-shadow: 0 4px 40px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(34, 211, 238, 0.12) inset;
-        }
-        .panel-float {
-            transition: box-shadow 0.35s ease, transform 0.35s ease, border-color 0.35s ease;
-            animation: panel-hover-float 5s ease-in-out infinite;
-        }
-        @keyframes panel-hover-float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
-        }
-        .panel-float:hover {
-            border-color: rgba(34, 211, 238, 0.35);
-            box-shadow:
-                0 0 0 1px rgba(34, 211, 238, 0.1) inset,
-                0 16px 56px rgba(34, 211, 238, 0.12),
-                0 0 60px rgba(167, 139, 250, 0.08);
-        }
-
-        .terminal-shell {
-            position: relative;
-            border-radius: 14px;
-            padding: 1px;
-            background: linear-gradient(125deg, rgba(34, 211, 238, 0.75), rgba(167, 139, 250, 0.55), rgba(251, 191, 36, 0.4), rgba(34, 211, 238, 0.75));
-            background-size: 300% 300%;
-            animation: term-border 6s linear infinite;
-            box-shadow: 0 0 32px rgba(34, 211, 238, 0.12);
-        }
-        @keyframes term-border {
-            0% { background-position: 0% 50%; }
-            100% { background-position: 100% 50%; }
-        }
-        .terminal-shell::after {
-            content: '';
-            position: absolute;
-            inset: 1px;
-            border-radius: 13px;
-            background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0, 0, 0, 0.05) 3px, rgba(0, 0, 0, 0.05) 6px);
-            pointer-events: none;
-            opacity: 0.55;
-            z-index: 2;
-        }
-        .terminal-v2 {
-            position: relative;
-            z-index: 1;
-            background: linear-gradient(168deg, #020617 0%, #0c1222 40%, #0f172a 100%);
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.78rem;
-            border: none;
-            border-radius: 13px;
-            min-height: 280px;
-            max-height: min(52vh, 520px);
-            overflow-y: auto;
-            padding: 1rem 1.1rem;
-            box-shadow: inset 0 0 100px rgba(34, 211, 238, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-        }
-        .terminal-v2 .ln { margin-bottom: 0.35rem; animation: line-in 0.35s ease both; }
-        @keyframes line-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
-
-        .activity-item {
-            border-left: 3px solid var(--neon-cyan);
-            animation: feed-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-            box-shadow: 0 0 20px rgba(34, 211, 238, 0.04);
-        }
-        .activity-item.severity-error { border-left-color: #f87171; }
-        .activity-item.severity-success { border-left-color: #34d399; }
-        @keyframes feed-pop { from { opacity: 0; transform: translateX(-16px) scale(0.96); } to { opacity: 1; transform: none; } }
-
-        .wallet-chip {
-            animation: chip-in 0.5s ease both;
-        }
-        .wallet-chip.flash {
-            animation: wallet-flash 0.9s ease;
-        }
-        @keyframes chip-in { from { opacity: 0; transform: translateY(-6px); } }
-        @keyframes wallet-flash {
-            0%, 100% { box-shadow: 0 0 0 0 transparent; }
-            40% { box-shadow: 0 0 24px rgba(34, 211, 238, 0.45); }
-        }
-        .wallet-neon {
-            border-color: rgba(34, 211, 238, 0.25) !important;
-            box-shadow: 0 0 24px rgba(34, 211, 238, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-        }
-
-        .nav-link { cursor: pointer; transition: all 0.25s ease; border: 1px solid transparent; }
-        .nav-link:hover:not(.active) {
-            background: rgba(34, 211, 238, 0.06);
-            border-color: rgba(34, 211, 238, 0.12);
-            box-shadow: 0 0 20px rgba(34, 211, 238, 0.08);
-        }
-        .nav-link.active {
-            background: linear-gradient(135deg, rgba(34, 211, 238, 0.22), rgba(167, 139, 250, 0.14));
-            border: 1px solid rgba(34, 211, 238, 0.45);
-            color: #5eead4;
-            box-shadow: 0 0 24px rgba(34, 211, 238, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-        }
-
-        /* Agent vault: horizontal pipeline (readable, ordered flow) */
-        .flow-pipeline {
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-            max-width: 72rem;
-            margin: 0 auto;
-        }
-        @media (min-width: 1024px) {
-            .flow-pipeline { flex-direction: row; align-items: stretch; gap: 0; }
-        }
-        .flow-connector {
-            display: none;
-            align-items: center;
-            justify-content: center;
-            color: rgba(34, 211, 238, 0.5);
-            font-size: 1.25rem;
-            width: 2rem;
-            flex-shrink: 0;
-        }
-        .flow-connector i {
-            animation: flow-arrow 1.4s ease-in-out infinite;
-        }
-        @keyframes flow-arrow {
-            0%, 100% { transform: translateX(0); opacity: 0.45; text-shadow: 0 0 6px rgba(34, 211, 238, 0.4); }
-            50% { transform: translateX(5px); opacity: 1; text-shadow: 0 0 14px rgba(34, 211, 238, 0.9); }
-        }
-        @media (min-width: 1024px) { .flow-connector { display: flex; } }
-        .flow-step {
-            flex: 1;
-            min-width: 0;
-            background: linear-gradient(180deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95));
-            border: 1px solid rgba(71, 85, 105, 0.55);
-            border-radius: 1rem;
-            padding: 1.25rem 1rem;
-            text-align: center;
-            position: relative;
-            transition: border-color 0.35s, box-shadow 0.35s;
-            animation: step-float 4.5s ease-in-out infinite;
-        }
-        #node-1.flow-step { animation-delay: 0s; }
-        #node-2.flow-step { animation-delay: 0.35s; }
-        #node-3.flow-step { animation-delay: 0.7s; }
-        #node-4.flow-step { animation-delay: 1.05s; }
-        @keyframes step-float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
-        }
-        .flow-step .step-num {
-            position: absolute;
-            top: 0.5rem;
-            left: 0.5rem;
-            font-size: 0.65rem;
-            font-weight: 800;
-            color: rgba(148, 163, 184, 0.7);
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .flow-step.completed {
-            border-color: rgba(52, 211, 153, 0.65);
-            box-shadow: 0 0 20px rgba(52, 211, 153, 0.12);
-        }
-        .flow-step.active {
-            border-color: rgba(34, 211, 238, 0.95);
-            background: linear-gradient(180deg, rgba(34, 211, 238, 0.1), rgba(15, 23, 42, 0.95));
-            animation: step-float 4.5s ease-in-out infinite, step-neon 2s ease-in-out infinite;
-        }
-        @keyframes step-neon {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.35), 0 8px 36px rgba(34, 211, 238, 0.18); }
-            50% { box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15), 0 0 48px rgba(167, 139, 250, 0.22); }
-        }
-
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.9); border-radius: 8px; }
-
-        .btn-launch {
-            background: linear-gradient(90deg, #0891b2, #6366f1, #a78bfa, #0891b2);
-            background-size: 300% 100%;
-            animation: btn-flow 5s linear infinite;
-            box-shadow: 0 0 28px rgba(99, 102, 241, 0.45), 0 8px 32px rgba(34, 211, 238, 0.25);
-            transition: transform 0.2s, box-shadow 0.2s, filter 0.2s;
-        }
-        @keyframes btn-flow { to { background-position: 100% 50%; } }
-        .btn-launch:hover:not(:disabled) {
-            transform: translateY(-3px) scale(1.02);
-            filter: brightness(1.08);
-            box-shadow: 0 0 40px rgba(34, 211, 238, 0.45), 0 12px 48px rgba(167, 139, 250, 0.25);
-        }
-        .btn-launch:disabled { opacity: 0.55; cursor: not-allowed; animation: none; }
+        body { background-color: #05070a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 0.5); }
+        .terminal-compact { background-color: #020617; font-family: 'Fira Code', monospace; font-size: 0.75rem; border: 1px solid #1e293b; border-radius: 4px; height: 180px; overflow-y: auto; padding: 10px; }
+        .tx-feed-item { border-left: 2px solid #3b82f6; transition: all 0.3s ease; }
+        .tx-feed-item:hover { background: rgba(59, 130, 246, 0.1); }
+        .glow-blue { box-shadow: 0 0 20px rgba(59, 130, 246, 0.2); }
+        .nav-link { position: relative; transition: color 0.3s; cursor: pointer; }
+        .nav-link.active::after { content: ''; position: absolute; bottom: -4px; left: 0; width: 100%; height: 2px; background: #3b82f6; box-shadow: 0 0 10px #3b82f6; }
+        
+        /* Vault Styles */
+        .node-advanced { background: #1e293b; border: 1px solid #334155; border-radius: 12px; width: 200px; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); position: relative; z-index: 10; }
+        .node-advanced.active { border-color: #3b82f6; box-shadow: 0 0 30px rgba(59, 130, 246, 0.2); transform: translateY(-5px); }
+        .node-advanced.completed { border-color: #10b981; }
+        .flow-path { height: 2px; background: #1e293b; flex-grow: 1; position: relative; margin: 0 -5px; z-index: 5; overflow: hidden; }
+        .flow-path-active::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, #3b82f6, transparent); animation: flow-move 1.5s infinite linear; }
+        @keyframes flow-move { to { left: 100%; } }
+        .stat-box { background: rgba(30, 41, 59, 0.5); border: 1px solid #334155; padding: 1rem; border-radius: 12px; }
+        .tx-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 0.75rem; border-left: 3px solid #3b82f6; }
+        .indicator { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+        .indicator-idle { background: #475569; }
+        .indicator-active { background: #3b82f6; box-shadow: 0 0 10px #3b82f6; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
     </style>
 </head>
-<body>
-    <div id="boot-layer">
-        <div class="boot-inner">
-            <div class="boot-label">Loading StellarX-402</div>
-            <div class="boot-logo-wrap">
-                <svg viewBox="0 0 100 100" aria-hidden="true" role="img">
-                    <title>Stellar</title>
-                    <defs><linearGradient id="sg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#22d3ee"/><stop offset="100%" stop-color="#818cf8"/></linearGradient></defs>
-                    <circle cx="50" cy="50" r="44" fill="none" stroke="url(#sg)" stroke-width="1.5" opacity="0.4"/>
-                    <path fill="url(#sg)" d="M50 12 L62 42 L94 42 L68 62 L78 94 L50 74 L22 94 L32 62 L6 42 L38 42 Z"/>
-                </svg>
-            </div>
-            <div class="boot-bar-wrap"><div id="boot-progress-fill"></div></div>
-            <div id="boot-pct">0%</div>
-            <div class="boot-sub">Stellar testnet · x402 executor</div>
-        </div>
-    </div>
-
-    <div class="mesh-bg" aria-hidden="true"></div>
-    <canvas id="bg-canvas"></canvas>
-    <div class="app-root flex h-screen overflow-hidden">
-        <aside class="w-64 glass-panel sidebar-neon border-0 border-r border-slate-800/80 flex flex-col p-5 space-y-8 rounded-none">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 flex items-center justify-center logo-orbit">
-                    <i class="fas fa-bolt text-white text-sm"></i>
+<body class="min-h-screen">
+    <div class="flex h-screen overflow-hidden">
+        <!-- Sidebar -->
+        <aside class="w-64 glass border-r border-slate-800 flex flex-col p-6 space-y-8">
+            <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-900">
+                    <i class="fas fa-bolt text-white"></i>
                 </div>
-                <div>
-                    <div class="text-lg font-extrabold tracking-tight">StellarX-402</div>
-                    <div class="text-[10px] text-slate-500 uppercase tracking-widest">Executor mesh</div>
-                </div>
+                <span class="text-xl font-bold tracking-tight">StellarX-402</span>
             </div>
+            
             <nav class="flex-1 space-y-2">
-                <div onclick="switchView('console')" id="nav-console" class="nav-link active flex items-center gap-3 p-3 rounded-xl text-sm font-medium">
-                    <i class="fas fa-cube w-5 text-center"></i><span>Executor Console</span>
+                <div onclick="switchView('console')" id="nav-console" class="nav-link active flex items-center space-x-3 text-blue-400 p-2 rounded-md bg-blue-900/20">
+                    <i class="fas fa-terminal"></i>
+                    <span>Executor Console</span>
                 </div>
-                <div onclick="switchView('vault')" id="nav-vault" class="nav-link flex items-center gap-3 p-3 rounded-xl text-slate-400 hover:text-white text-sm font-medium">
-                    <i class="fas fa-shield-halved w-5 text-center"></i><span>Agent Vault</span>
+                <div onclick="switchView('vault')" id="nav-vault" class="nav-link flex items-center space-x-3 text-slate-400 hover:text-white p-2 rounded-md hover:bg-slate-800/50">
+                    <i class="fas fa-vault"></i>
+                    <span>Agent Vault</span>
                 </div>
             </nav>
-            <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs">
-                <div class="text-slate-500 mb-2 uppercase tracking-widest font-bold">System state</div>
-                <div id="system-state-text" class="flex items-center text-slate-400">
-                    <span class="w-2 h-2 rounded-full bg-slate-500 mr-2" id="state-dot"></span>
-                    <span id="state-msg">Standby</span>
+
+            <div id="sidebar-status" class="p-4 rounded-xl bg-slate-900/50 border border-slate-800 text-xs">
+                <div class="text-slate-500 mb-2 uppercase tracking-widest font-semibold">System State</div>
+                <div id="system-state-text" class="flex items-center text-slate-400 italic">
+                    <span class="indicator indicator-idle"></span>
+                    Waiting for instructions...
                 </div>
             </div>
         </aside>
 
-        <main class="flex-1 flex flex-col overflow-hidden bg-gradient-to-br from-slate-950 via-slate-950 to-slate-900/80">
-            <header class="p-5 border-b border-slate-800/80 flex flex-wrap justify-between items-center gap-4 glass-panel header-bar rounded-none border-x-0 border-t-0">
-                <div>
-                    <h2 id="view-title" class="text-xl font-extrabold tracking-tight title-glow">Executor Dashboard</h2>
-                    <p class="text-xs text-slate-500 mt-0.5">x402 micropayment · Docker sandbox · Signed results</p>
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col overflow-hidden bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-950 to-slate-950">
+            <header class="p-6 border-b border-slate-800 flex justify-between items-center glass">
+                <h2 id="view-title" class="text-lg font-semibold">Executor Dashboard</h2>
+                <div id="wallets-header" class="flex space-x-6">
+                    <!-- Loaded via JS -->
                 </div>
-                <div id="wallets-header" class="flex flex-wrap gap-4 justify-end"></div>
             </header>
 
+            <!-- Console View -->
             <div id="view-console" class="flex-1 p-6 overflow-y-auto grid grid-cols-12 gap-6">
+                <!-- Configuration & Launch -->
                 <div class="col-span-12 lg:col-span-4 space-y-6">
-                    <div class="glass-panel p-6 panel-float">
-                        <h3 class="text-xs font-bold uppercase text-slate-400 mb-4 tracking-[0.2em]">Configure job</h3>
+                    <div class="glass p-6 rounded-2xl glow-blue">
+                        <h3 class="text-sm font-semibold uppercase text-slate-400 mb-4 tracking-wider">Configure Job</h3>
                         <div class="space-y-4">
-                            <div>
-                                <label class="text-[10px] text-slate-500 uppercase font-bold block mb-1">Docker image</label>
-                                <input id="image" type="text" value="python:3.11-slim" class="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none">
+                            <div class="group">
+                                <label class="text-xs text-slate-500 mb-1 block group-focus-within:text-blue-400 transition-colors">DOCKER_IMAGE</label>
+                                <input id="image" type="text" value="python:3.11-slim" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all">
                             </div>
-                            <div>
-                                <label class="text-[10px] text-slate-500 uppercase font-bold block mb-1">Command</label>
-                                <textarea id="cmd" rows="4" class="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono focus:border-cyan-500 outline-none">python -c "print('Booting...'); import time; time.sleep(1); print('Task started...'); time.sleep(2); print('Success.')"</textarea>
+                            <div class="group">
+                                <label class="text-xs text-slate-500 mb-1 block group-focus-within:text-blue-400 transition-colors">COMMAND_ENTRYPOINT</label>
+                                <textarea id="cmd" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all">python -c "print('Booting...'); import time; time.sleep(1); print('Task started...'); time.sleep(2); print('Success.')"</textarea>
                             </div>
-                            <button id="run-btn" class="btn-launch w-full py-3.5 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2">
-                                <i class="fas fa-play"></i> Launch process
+                            <button id="run-btn" class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shadow-lg shadow-blue-900/20 transition-all active:scale-95 flex items-center justify-center group">
+                                <i class="fas fa-play mr-2 group-hover:translate-x-1 transition-transform"></i>
+                                LAUNCH PROCESS
                             </button>
-                            <details class="mt-4 text-xs border border-slate-700/80 rounded-xl p-3 bg-slate-950/40">
-                                <summary class="cursor-pointer text-cyan-400/90 font-bold uppercase tracking-wider">Pay with your wallet (x402)</summary>
-                                <p class="text-slate-500 mt-2 mb-2">Get an unsigned Stellar payment (0.05 XLM → executor). Sign & submit in Freighter or CLI, then launch with the tx hash in the stream header (or use Launch — demo pay still works).</p>
-                                <label class="text-[10px] text-slate-500 uppercase font-bold block mb-1">Source G-address</label>
-                                <input id="x402-source" type="text" placeholder="G..." class="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono mb-2">
-                                <button type="button" id="x402-prepare-btn" class="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-bold uppercase">Get unsigned transaction XDR</button>
-                                <textarea id="x402-xdr-out" readonly rows="4" class="w-full mt-2 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-[10px] font-mono text-slate-400 hidden"></textarea>
-                            </details>
                         </div>
                     </div>
-                    <div class="glass-panel p-6 panel-float">
-                        <div class="flex justify-between items-center mb-3">
-                            <h3 class="text-xs font-bold uppercase text-slate-400 tracking-[0.2em]">Live activity</h3>
-                            <button type="button" onclick="clearActivityFeed()" class="text-[10px] text-slate-500 hover:text-cyan-400 uppercase font-bold">Clear</button>
+
+                    <div class="glass p-6 rounded-2xl border-slate-800/50">
+                        <h3 class="text-sm font-semibold uppercase text-slate-400 mb-4 tracking-wider">Live TX Feed</h3>
+                        <div id="tx-feed" class="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                            <!-- Transactions added here -->
                         </div>
-                        <div id="tx-feed" class="space-y-2 max-h-[min(58vh,640px)] overflow-y-auto pr-1 custom-scrollbar"></div>
                     </div>
                 </div>
 
-                <div class="col-span-12 lg:col-span-8 flex flex-col gap-6">
-                    <div class="glass-panel p-6 flex-1 flex flex-col panel-float min-h-[320px]">
-                        <div class="flex justify-between items-center mb-3">
-                            <div class="flex items-center gap-3">
-                                <h3 class="text-xs font-bold uppercase text-slate-400 tracking-[0.2em]">System output</h3>
-                                <span id="job-status" class="px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-400 font-bold uppercase">Standby</span>
+                <!-- Live Execution & Results -->
+                <div class="col-span-12 lg:col-span-8 flex flex-col space-y-6">
+                    <div class="glass p-6 rounded-2xl flex-1 flex flex-col border-slate-800/50">
+                        <div class="flex justify-between items-center mb-4">
+                            <div class="flex items-center space-x-3">
+                                <h3 class="text-sm font-semibold uppercase text-slate-400 tracking-wider">System Output</h3>
+                                <span id="job-status" class="px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-400 font-bold uppercase tracking-tighter">Standby</span>
                             </div>
-                            <button onclick="clearConsole()" class="text-slate-500 hover:text-white text-xs font-bold uppercase"><i class="fas fa-eraser mr-1"></i>Clear</button>
+                            <button onclick="clearConsole()" class="text-slate-500 hover:text-slate-300 text-xs transition-colors">
+                                <i class="fas fa-eraser mr-1"></i> CLEAR
+                            </button>
                         </div>
-                        <div class="terminal-shell flex-1 flex flex-col min-h-0">
-                            <div id="terminal" class="terminal-v2 flex-1 custom-scrollbar">
-                                <div class="ln text-slate-600 italic"># Awaiting instructions…</div>
-                            </div>
+                        <div id="terminal" class="terminal-compact flex-1">
+                            <span class="text-slate-600 italic opacity-50"># Waiting for instructions...</span>
                         </div>
                     </div>
-                    <div id="result-panel" class="hidden glass-panel p-6 border-cyan-500/20 panel-float">
-                        <div class="flex justify-between items-start gap-4">
+
+                    <div id="result-panel" class="hidden glass p-6 rounded-2xl border-blue-500/20 bg-blue-900/5">
+                        <div class="flex justify-between items-start">
                             <div>
-                                <h4 id="result-title" class="text-xs font-bold text-cyan-400 uppercase mb-1">Execution result</h4>
-                                <p id="res-job-id" class="text-base font-mono text-slate-200">JOB_ID</p>
+                                <h4 id="result-title" class="text-xs font-bold text-blue-400 uppercase mb-2">Execution Result</h4>
+                                <p id="res-job-id" class="text-lg font-mono text-slate-200">JOB_ID: 8a2f-9b11-4c03</p>
                             </div>
-                            <div class="text-right text-xs">
-                                <div class="text-slate-500 uppercase font-bold mb-1">Time</div>
-                                <div id="res-time" class="font-mono text-slate-400">—</div>
+                            <div class="text-right">
+                                <div class="text-[10px] text-slate-500 mb-1">COMPLETION_TIME</div>
+                                <div id="res-time" class="text-sm font-mono text-slate-400">...</div>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-xs">
-                            <div class="rounded-xl border border-slate-700/80 bg-slate-950/50 p-4">
-                                <div class="text-slate-500 uppercase font-bold mb-2">Verification</div>
-                                <div id="res-verified" class="text-base font-semibold text-emerald-400">—</div>
+                            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+                                <div class="text-slate-500 uppercase tracking-widest mb-2">Verification</div>
+                                <div id="res-verified" class="text-base font-semibold text-green-400">Verified</div>
                                 <div id="res-validation-reason" class="text-slate-400 mt-2 leading-relaxed"></div>
                             </div>
-                            <div class="rounded-xl border border-slate-700/80 bg-slate-950/50 p-4">
-                                <div class="text-slate-500 uppercase font-bold mb-2">Signature</div>
+                            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+                                <div class="text-slate-500 uppercase tracking-widest mb-2">Signature</div>
                                 <div class="text-slate-400">Strategy: <span id="res-validation-strategy" class="text-slate-200"></span></div>
-                                <div class="text-slate-400 mt-2 font-mono text-[10px] break-all" id="res-pubkey"></div>
-                                <div class="text-slate-400 mt-2 font-mono text-[10px] break-all text-emerald-300/90" id="res-signature"></div>
+                                <div class="text-slate-400 mt-2">Public Key</div>
+                                <div id="res-pubkey" class="font-mono text-[10px] text-blue-300 break-all"></div>
+                                <div class="text-slate-400 mt-2">Signature</div>
+                                <div id="res-signature" class="font-mono text-[10px] text-emerald-300 break-all"></div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div id="view-vault" class="hidden flex-1 p-6 overflow-y-auto space-y-10">
-                <section>
-                    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-2 mb-4">
-                        <div>
-                            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-[0.25em]">Execution pipeline</h3>
-                            <p class="text-[11px] text-slate-500 mt-1">Left to right: pay → verify agent → run → sign</p>
-                        </div>
-                        <div id="current-step-label" class="text-xs text-cyan-400 font-mono font-bold">STEP 0/4 · READY</div>
+            <!-- Vault View -->
+            <div id="view-vault" class="hidden flex-1 p-8 overflow-y-auto space-y-12">
+                <!-- Flow Visualization -->
+                <section class="space-y-6">
+                    <div class="flex justify-between items-end">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-[0.2em]">Process Lifecycle</h3>
+                        <div id="current-step-label" class="text-xs text-blue-400 font-mono">STEP 0/4: READY</div>
                     </div>
-                    <div class="flow-pipeline py-2">
-                        <div id="node-1" class="flow-step">
-                            <span class="step-num">01</span>
-                            <i class="fas fa-wallet text-2xl text-cyan-400 mb-2"></i>
-                            <div class="text-sm font-bold">Wallet</div>
-                            <div class="text-[10px] text-slate-500 mt-1">x402 payment</div>
+                    
+                    <div class="flex items-center justify-between py-12 px-4">
+                        <div id="node-1" class="node-advanced p-6 text-center">
+                            <i class="fas fa-wallet text-2xl text-blue-500 mb-3"></i>
+                            <div class="text-sm font-bold">Stellar Wallet</div>
+                            <div class="text-[10px] text-slate-500 mt-1">Authorization & Fees</div>
                         </div>
-                        <div class="flow-connector"><i class="fas fa-chevron-right"></i></div>
-                        <div id="node-2" class="flow-step">
-                            <span class="step-num">02</span>
-                            <i class="fas fa-id-card text-2xl text-emerald-400 mb-2"></i>
-                            <div class="text-sm font-bold">Registry</div>
-                            <div class="text-[10px] text-slate-500 mt-1">Agent on-chain</div>
+                        <div id="path-1" class="flow-path"></div>
+                        
+                        <div id="node-2" class="node-advanced p-6 text-center">
+                            <i class="fas fa-id-card text-2xl text-green-500 mb-3"></i>
+                            <div class="text-sm font-bold">Agent Registry</div>
+                            <div class="text-[10px] text-slate-500 mt-1">Contract Verification</div>
                         </div>
-                        <div class="flow-connector"><i class="fas fa-chevron-right"></i></div>
-                        <div id="node-3" class="flow-step">
-                            <span class="step-num">03</span>
-                            <i class="fas fa-microchip text-2xl text-violet-400 mb-2"></i>
-                            <div class="text-sm font-bold">Execution</div>
-                            <div class="text-[10px] text-slate-500 mt-1">Docker task</div>
+                        <div id="path-2" class="flow-path"></div>
+                        
+                        <div id="node-3" class="node-advanced p-6 text-center">
+                            <i class="fas fa-microchip text-2xl text-purple-500 mb-3"></i>
+                            <div class="text-sm font-bold">Execution Engine</div>
+                            <div class="text-[10px] text-slate-500 mt-1">Sandboxed Docker Run</div>
                         </div>
-                        <div class="flow-connector"><i class="fas fa-chevron-right"></i></div>
-                        <div id="node-4" class="flow-step">
-                            <span class="step-num">04</span>
-                            <i class="fas fa-shield-halved text-2xl text-amber-400 mb-2"></i>
-                            <div class="text-sm font-bold">Finality</div>
-                            <div class="text-[10px] text-slate-500 mt-1">Signed result</div>
+                        <div id="path-3" class="flow-path"></div>
+                        
+                        <div id="node-4" class="node-advanced p-6 text-center">
+                            <i class="fas fa-shield-alt text-2xl text-amber-500 mb-3"></i>
+                            <div class="text-sm font-bold">Result Finality</div>
+                            <div class="text-[10px] text-slate-500 mt-1">Signed & Recorded</div>
                         </div>
                     </div>
                 </section>
-                <div class="grid grid-cols-12 gap-8 pt-4 border-t border-slate-800/80">
-                    <div class="col-span-12 lg:col-span-4 space-y-4">
-                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-[0.25em]">Agent stats</h3>
-                        <div class="glass-panel p-4">
-                            <div class="text-[10px] text-slate-500 uppercase font-bold mb-1">Reputation</div>
-                            <div id="stat-reputation" class="text-2xl font-extrabold text-cyan-400">—</div>
+
+                <!-- Stats and History -->
+                <div class="grid grid-cols-12 gap-8 pt-8 border-t border-slate-800">
+                    <div class="col-span-12 lg:col-span-4 space-y-6">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-[0.2em]">Agent Stats</h3>
+                        <div class="stat-box">
+                            <div class="text-[10px] text-slate-500 uppercase mb-1">On-Chain Reputation</div>
+                            <div id="stat-reputation" class="text-xl font-bold text-blue-400">...</div>
                         </div>
-                        <div class="glass-panel p-4">
-                            <div class="text-[10px] text-slate-500 uppercase font-bold mb-1">Status</div>
-                            <div id="stat-status" class="text-xl font-bold">—</div>
+                        <div class="stat-box">
+                            <div class="text-[10px] text-slate-500 uppercase mb-1">Agent Status</div>
+                            <div id="stat-status" class="text-xl font-bold">...</div>
                         </div>
-                        <div class="glass-panel p-4">
-                            <div class="text-[10px] text-slate-500 uppercase font-bold mb-2">Registry contract</div>
-                            <div id="contract-id-display" class="text-[10px] font-mono text-cyan-400/90 break-all bg-slate-950/80 p-2 rounded-lg border border-slate-800">—</div>
+                        <div class="stat-box col-span-2">
+                            <div class="text-[10px] text-slate-500 uppercase mb-2">Registry Contract ID</div>
+                            <div id="contract-id-display" class="text-[10px] font-mono text-blue-400 break-all bg-slate-950 p-3 rounded border border-slate-800">...</div>
                         </div>
                     </div>
-                    <div class="col-span-12 lg:col-span-8">
-                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-[0.25em] mb-4">On-chain ledger</h3>
-                        <div id="vault-tx-feed" class="space-y-2 custom-scrollbar max-h-[400px] overflow-y-auto"></div>
+
+                    <div class="col-span-12 lg:col-span-8 space-y-6">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-[0.2em]">Action Ledger</h3>
+                        <div id="vault-tx-feed" class="space-y-3">
+                            <!-- Populated via API -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -563,428 +222,321 @@
     </div>
 
     <script>
-        (function bootScreen() {
-            const layer = document.getElementById('boot-layer');
-            const fill = document.getElementById('boot-progress-fill');
-            const pctEl = document.getElementById('boot-pct');
-            let p = 0;
-            function tick() {
-                p += Math.random() * 9 + 4;
-                if (p > 100) p = 100;
-                document.documentElement.style.setProperty('--boot-p', p);
-                pctEl.textContent = Math.floor(p) + '%';
-                if (p < 100) requestAnimationFrame(() => setTimeout(tick, 95));
-                else setTimeout(() => document.body.classList.add('ready'), 500);
-            }
-            requestAnimationFrame(tick);
-        })();
-
-        let threeRenderer = null;
-        function initThreeBackground() {
-            if (typeof THREE === 'undefined') return;
-            const canvas = document.getElementById('bg-canvas');
-            const scene = new THREE.Scene();
-            const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-            camera.position.z = 14;
-            threeRenderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-            threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            threeRenderer.setSize(window.innerWidth, window.innerHeight);
-            threeRenderer.setClearColor(0x000000, 0);
-
-            const n = 1800;
-            const positions = new Float32Array(n * 3);
-            for (let i = 0; i < n * 3; i++) positions[i] = (Math.random() - 0.5) * 45;
-            const geo = new THREE.BufferGeometry();
-            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            const mat = new THREE.PointsMaterial({
-                color: 0x5eead4,
-                size: 0.075,
-                transparent: true,
-                opacity: 0.62,
-                blending: THREE.AdditiveBlending,
-                depthWrite: false
-            });
-            const points = new THREE.Points(geo, mat);
-            scene.add(points);
-
-            const geo2 = geo.clone();
-            const mat2 = new THREE.PointsMaterial({
-                color: 0xc4b5fd,
-                size: 0.055,
-                transparent: true,
-                opacity: 0.48,
-                blending: THREE.AdditiveBlending,
-                depthWrite: false
-            });
-            const points2 = new THREE.Points(geo2, mat2);
-            points2.rotation.y = Math.PI / 3;
-            scene.add(points2);
-
-            function onResize() {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                threeRenderer.setSize(window.innerWidth, window.innerHeight);
-            }
-            window.addEventListener('resize', onResize);
-
-            function animate() {
-                requestAnimationFrame(animate);
-                points.rotation.y += 0.00055;
-                points.rotation.x += 0.00012;
-                points2.rotation.y -= 0.0004;
-                threeRenderer.render(scene, camera);
-            }
-            animate();
-        }
-        window.addEventListener('load', () => setTimeout(initThreeBackground, 400));
-
+        // State Management
         let currentView = 'console';
         let isExecuting = false;
-        let cachedChainTxs = [];
 
         function switchView(view) {
             currentView = view;
             document.getElementById('view-console').classList.toggle('hidden', view !== 'console');
             document.getElementById('view-vault').classList.toggle('hidden', view !== 'vault');
-            const nc = document.getElementById('nav-console');
-            const nv = document.getElementById('nav-vault');
-            nc.className = 'nav-link flex items-center gap-3 p-3 rounded-xl text-sm font-medium ' + (view === 'console' ? 'active' : 'text-slate-400 hover:text-white');
-            nv.className = 'nav-link flex items-center gap-3 p-3 rounded-xl text-sm font-medium ' + (view === 'vault' ? 'active' : 'text-slate-400 hover:text-white');
-            document.getElementById('view-title').textContent = view === 'console' ? 'Executor Dashboard' : 'Agent Vault · Pipeline';
+            
+            // Nav styling
+            document.getElementById('nav-console').className = `nav-link ${view === 'console' ? 'active' : ''} flex items-center space-x-3 ${view === 'console' ? 'text-blue-400 p-2 rounded-md bg-blue-900/20' : 'text-slate-400 hover:text-white p-2 rounded-md hover:bg-slate-800/50'}`;
+            document.getElementById('nav-vault').className = `nav-link ${view === 'vault' ? 'active' : ''} flex items-center space-x-3 ${view === 'vault' ? 'text-blue-400 p-2 rounded-md bg-blue-900/20' : 'text-slate-400 hover:text-white p-2 rounded-md hover:bg-slate-800/50'}`;
+            
+            document.getElementById('view-title').textContent = view === 'console' ? 'Executor Dashboard' : 'Virtual Flow & Agent Registry';
         }
 
-        function saveTerminal(html) {
-            localStorage.setItem('terminal_logs', html);
+        // Persistent Logs
+        function saveLog(key, html) {
+            localStorage.setItem(key, html);
         }
-        function loadTerminal() {
-            const h = localStorage.getItem('terminal_logs');
-            if (h) document.getElementById('terminal').innerHTML = h;
+
+        function loadLogs() {
+            const terminalHtml = localStorage.getItem('terminal_logs');
+            if (terminalHtml) document.getElementById('terminal').innerHTML = terminalHtml;
+            
+            const txHtml = localStorage.getItem('tx_logs');
+            if (txHtml) {
+                document.getElementById('tx-feed').innerHTML = txHtml;
+                document.getElementById('vault-tx-feed').innerHTML = txHtml.replace(/tx-feed-item/g, 'tx-card').replace(/glass/g, '');
+            }
+
+            const lastResult = localStorage.getItem('last_result');
+            if (lastResult) {
+                const data = JSON.parse(lastResult);
+                showResultPanel(data);
+            }
         }
+
         function clearConsole() {
-            document.getElementById('terminal').innerHTML = '<div class="ln text-slate-600 italic"># Awaiting instructions…</div>';
+            document.getElementById('terminal').innerHTML = '<span class="text-slate-600 italic opacity-50"># Waiting for instructions...</span>';
+            document.getElementById('tx-feed').innerHTML = '';
+            document.getElementById('vault-tx-feed').innerHTML = '';
             document.getElementById('result-panel').classList.add('hidden');
             localStorage.removeItem('terminal_logs');
+            localStorage.removeItem('tx_logs');
             localStorage.removeItem('last_result');
         }
-        async function clearActivityFeed() {
-            try {
-                await fetch('/api/activity/clear', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ confirm: true })
-                });
-                document.getElementById('tx-feed').innerHTML = '';
-                document.getElementById('vault-tx-feed').innerHTML = '';
-            } catch (e) { console.warn(e); }
+
+        function appendTX(type, amount, hash) {
+            const txFeed = document.getElementById('tx-feed');
+            const vaultTxFeed = document.getElementById('vault-tx-feed');
+            
+            const id = 'tx_' + Date.now();
+            const div = document.createElement('div');
+            div.dataset.id = id;
+            div.className = 'tx-feed-item glass p-3 rounded-lg text-xs flex justify-between items-center border-l-4 border-blue-500 mb-3';
+            div.innerHTML = `
+                <div>
+                    <div class="text-slate-400 font-semibold">${type}</div>
+                    <div class="text-[10px] text-slate-600 font-mono">${hash}</div>
+                </div>
+                <div class="text-blue-400 font-bold">-${amount}</div>
+            `;
+            txFeed.prepend(div);
+            saveLog('tx_logs', txFeed.innerHTML);
+
+            // Sync with Vault View
+            const vaultDiv = div.cloneNode(true);
+            vaultDiv.className = 'tx-card flex justify-between items-center animate-slide-in mb-3';
+            vaultTxFeed.prepend(vaultDiv);
         }
 
         function appendLog(text) {
             const terminal = document.getElementById('terminal');
             const line = document.createElement('div');
-            line.className = 'ln';
-            line.innerHTML = '<span class="text-cyan-500/90 mr-2">›</span><span class="text-slate-300">' + escapeHtml(text) + '</span>';
+            line.className = 'mb-1';
+            line.innerHTML = `<span class="text-blue-500 mr-2">></span>${text}`;
             terminal.appendChild(line);
             terminal.scrollTop = terminal.scrollHeight;
-            saveTerminal(terminal.innerHTML);
-        }
-        function escapeHtml(s) {
-            const d = document.createElement('div');
-            d.textContent = s;
-            return d.innerHTML;
-        }
-
-        function renderActivityItem(ev, targetId) {
-            const sev = ev.severity || 'info';
-            const deltaParts = [ev.deployer_delta, ev.executor_delta].filter(Boolean);
-            const delta = deltaParts.length
-                ? `<span class="text-cyan-400 font-mono text-[10px]">${deltaParts.join(' · ')}</span>`
-                : (ev.amount_xlm ? `<span class="text-amber-400/90 font-mono text-[10px]">${escapeHtml(ev.amount_xlm)} XLM</span>` : '');
-            const row = document.createElement('div');
-            row.className = 'activity-item glass-panel p-3 rounded-lg text-xs flex justify-between gap-3 severity-' + sev;
-            row.dataset.eid = String(ev.id);
-            row.innerHTML = `
-                <div class="min-w-0">
-                    <div class="font-bold text-slate-200 truncate">${escapeHtml(ev.title || ev.kind || 'Event')}</div>
-                    <div class="text-[10px] text-slate-500 font-mono mt-0.5 break-all">${escapeHtml(ev.detail || '')}</div>
-                </div>
-                <div class="text-right shrink-0 flex flex-col justify-center">
-                    ${delta}
-                    <div class="text-[10px] text-slate-600 mt-1">${ev.hash_short ? '#' + escapeHtml(ev.hash_short) : (ev.kind || '')}</div>
-                </div>`;
-            return row;
-        }
-
-        function renderChainBlock() {
-            const wrap = document.createElement('div');
-            wrap.className = 'mt-4 pt-4 border-t border-slate-800/80';
-            if (!cachedChainTxs.length) {
-                wrap.innerHTML = '<div class="text-[10px] text-slate-600 uppercase font-bold">Horizon</div><div class="text-xs text-slate-500 mt-1">No recent transactions</div>';
-                return wrap;
-            }
-            const rows = cachedChainTxs.map(tx => `
-                <div class="glass-panel p-3 rounded-lg flex justify-between items-center text-xs border-l-2 border-violet-500/40 mb-2">
-                    <div class="min-w-0">
-                        <div class="font-bold text-slate-300">${escapeHtml(tx.account)} · chain</div>
-                        <div class="text-[10px] text-slate-600 font-mono truncate">${escapeHtml(tx.hash)}</div>
-                    </div>
-                    <div class="text-right shrink-0">
-                        <div class="text-emerald-400/90 font-mono">${escapeHtml(tx.fee)}</div>
-                        <div class="text-[10px] text-slate-600">${new Date(tx.created_at).toLocaleTimeString()}</div>
-                    </div>
-                </div>`).join('');
-            wrap.innerHTML = '<div class="text-[10px] text-violet-400/80 uppercase font-bold mb-2 tracking-widest">Horizon · recent</div>' + rows;
-            return wrap;
-        }
-
-        async function syncActivityFeed() {
-            try {
-                const res = await fetch('/api/activity');
-                if (!res.ok) return;
-                const data = await res.json();
-                const events = (data.events || []).slice().reverse();
-                const feed = document.getElementById('tx-feed');
-                const vaultFeed = document.getElementById('vault-tx-feed');
-                feed.innerHTML = '';
-                vaultFeed.innerHTML = '';
-                const cap = 100;
-                events.slice(0, cap).forEach(ev => feed.appendChild(renderActivityItem(ev, 'tx-feed')));
-                events.slice(0, cap).forEach(ev => vaultFeed.appendChild(renderActivityItem(ev, 'vault')));
-                vaultFeed.appendChild(renderChainBlock());
-            } catch (e) {}
+            saveLog('terminal_logs', terminal.innerHTML);
         }
 
         function showResultPanel(data) {
-            document.getElementById('result-panel').classList.remove('hidden');
-            document.getElementById('result-title').textContent = data.verified ? 'Verified result' : 'Execution result';
-            document.getElementById('res-job-id').textContent = 'JOB · ' + data.job_id.slice(0, 20) + '…';
+            const resultPanel = document.getElementById('result-panel');
+            const statusBadge = document.getElementById('job-status');
+            
+            resultPanel.classList.remove('hidden');
+            document.getElementById('result-title').textContent = data.verified ? 'Verified Result' : 'Execution Result';
+            document.getElementById('res-job-id').textContent = `JOB_ID: ${data.job_id.slice(0, 18)}`;
             document.getElementById('res-time').textContent = new Date(data.timestamp).toLocaleTimeString();
-            document.getElementById('res-verified').textContent = data.verified ? 'Verified' : 'Not verified';
-            document.getElementById('res-verified').className = 'text-base font-semibold ' + (data.verified ? 'text-emerald-400' : 'text-amber-400');
-            document.getElementById('res-validation-reason').textContent = data.validation_reason || '';
+            document.getElementById('res-verified').textContent = data.verified ? 'Verified' : 'Not Verified';
+            document.getElementById('res-verified').className = data.verified ? 'text-base font-semibold text-green-400' : 'text-base font-semibold text-amber-400';
+            document.getElementById('res-validation-reason').textContent = data.validation_reason || 'No validation details available.';
             document.getElementById('res-validation-strategy').textContent = data.validation_strategy || 'n/a';
-            document.getElementById('res-pubkey').textContent = data.pubkey || '';
-            document.getElementById('res-signature').textContent = data.signature || '';
-            const badge = document.getElementById('job-status');
-            badge.textContent = data.status;
-            badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ' +
-                (data.verified ? 'bg-emerald-950 text-emerald-400' : 'bg-amber-950 text-amber-400');
+            document.getElementById('res-pubkey').textContent = data.pubkey || 'n/a';
+            document.getElementById('res-signature').textContent = data.signature || 'n/a';
+            
+            statusBadge.textContent = data.status;
+            statusBadge.className = data.verified
+                ? 'px-2 py-0.5 rounded-full text-[10px] bg-green-900 text-green-400 font-bold uppercase tracking-tighter'
+                : 'px-2 py-0.5 rounded-full text-[10px] bg-amber-900 text-amber-400 font-bold uppercase tracking-tighter';
+            
             localStorage.setItem('last_result', JSON.stringify(data));
         }
 
-        async function burstRefreshWallets(times = 8, gapMs = 450) {
-            for (let i = 0; i < times; i++) {
-                await updateWallets(true);
-                await new Promise(r => setTimeout(r, gapMs));
-            }
-        }
-
-        async function updateWallets(flash = false) {
+        async function updateWallets() {
             try {
                 const res = await fetch('/api/vault');
                 const data = await res.json();
+                
+                // Update Header
                 const header = document.getElementById('wallets-header');
-                header.innerHTML = (data.wallets || []).map(w => `
-                    <div class="wallet-chip glass-panel wallet-neon px-4 py-2 rounded-xl border-slate-700/80 ${flash ? 'flash' : ''}">
-                        <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">${w.name}</div>
-                        <div class="text-sm font-mono font-bold text-slate-100">${parseFloat(w.balance).toFixed(2)} <span class="text-cyan-400">XLM</span></div>
-                    </div>`).join('');
+                header.innerHTML = data.wallets.map(w => `
+                    <div class="flex flex-col items-end">
+                        <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">${w.name}</span>
+                        <span class="text-sm font-mono text-slate-200">${parseFloat(w.balance).toFixed(2)} <span class="text-blue-400">XLM</span></span>
+                    </div>
+                `).join('');
 
-                const rep = document.getElementById('stat-reputation');
-                if (rep) rep.textContent = data.registry?.reputation ?? '—';
-                const st = document.getElementById('stat-status');
-                if (st) {
-                    st.textContent = data.registry?.active ? 'ACTIVE' : 'INACTIVE';
-                    st.className = 'text-xl font-bold ' + (data.registry?.active ? 'text-emerald-400' : 'text-rose-400');
-                }
-                const cid = document.getElementById('contract-id-display');
-                if (cid) cid.textContent = data.registry?.id || '—';
+                // Update Vault Stats
+                document.getElementById('stat-reputation').textContent = data.registry.reputation;
+                const statusEl = document.getElementById('stat-status');
+                statusEl.textContent = data.registry.active ? 'ACTIVE' : 'INACTIVE';
+                statusEl.className = data.registry.active ? 'text-xl font-bold text-green-500' : 'text-xl font-bold text-red-500';
+                document.getElementById('contract-id-display').textContent = data.registry.id;
 
-                cachedChainTxs = data.transactions || [];
-            } catch (e) {}
+                // Update On-chain Action Ledger
+                const vaultTxFeed = document.getElementById('vault-tx-feed');
+                // We keep session-local TXs (ones that start with 'tx_') but prepend on-chain history
+                const sessionTXs = Array.from(vaultTxFeed.children).filter(child => child.dataset.id && child.dataset.id.startsWith('tx_'));
+                
+                let historyHtml = data.transactions.map(tx => `
+                    <div class="tx-card flex justify-between items-center mb-3 opacity-80 border-slate-700">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-8 h-8 bg-slate-800 rounded flex items-center justify-center text-slate-400">
+                                <i class="fas fa-history"></i>
+                            </div>
+                            <div>
+                                <div class="text-xs font-bold">Ledger Finality (${tx.account})</div>
+                                <div class="text-[10px] text-slate-500 font-mono">HASH: ${tx.hash}</div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs font-bold text-slate-400">${tx.fee}</div>
+                            <div class="text-[10px] text-slate-600">${new Date(tx.created_at).toLocaleTimeString()}</div>
+                        </div>
+                    </div>
+                `).join('');
+
+                vaultTxFeed.innerHTML = historyHtml;
+                sessionTXs.forEach(stx => vaultTxFeed.prepend(stx));
+
+            } catch (err) {}
         }
 
         function updateFlowUI(state) {
-            const step = state.step || 0;
-            const status = state.status || 'idle';
-            const dot = document.getElementById('state-dot');
-            const msg = document.getElementById('state-msg');
+            const step = state.step;
+            const status = state.status;
+            
+            const stateText = document.getElementById('system-state-text');
             const stepLabel = document.getElementById('current-step-label');
-
+            
             if (status === 'idle') {
-                dot.className = 'w-2 h-2 rounded-full bg-slate-500 mr-2';
-                msg.textContent = 'Standby';
-                if (stepLabel) stepLabel.textContent = 'STEP 0/4 · READY';
+                stateText.innerHTML = '<span class="indicator indicator-idle"></span>Waiting for instructions...';
+                stepLabel.textContent = 'STEP 0/4: READY';
             } else {
-                dot.className = 'w-2 h-2 rounded-full bg-cyan-400 mr-2 animate-pulse shadow shadow-cyan-500/50';
-                msg.textContent = status.charAt(0).toUpperCase() + status.slice(1);
-                if (stepLabel) stepLabel.textContent = `STEP ${step}/4 · ${status.toUpperCase()}`;
+                stateText.innerHTML = `<span class="indicator indicator-active"></span>${status.toUpperCase()}...`;
+                stepLabel.textContent = `STEP ${step}/4: ${status.toUpperCase()}`;
             }
 
             for (let i = 1; i <= 4; i++) {
-                const node = document.getElementById('node-' + i);
+                const node = document.getElementById(`node-${i}`);
+                const path = document.getElementById(`path-${i}`);
                 if (!node) continue;
-                node.classList.remove('active', 'completed');
-                if (i < step) node.classList.add('completed');
-                else if (i === step && step > 0) node.classList.add('active');
+                
+                node.className = 'node-advanced p-6 text-center';
+                if (path) path.className = 'flow-path';
+
+                if (i < step) {
+                    node.classList.add('completed');
+                } else if (i === step) {
+                    node.classList.add('active');
+                    if (path) path.classList.add('flow-path-active');
+                }
             }
         }
 
-        async function parseSSEStream(reader, decoder, onDataObj) {
-            let buffer = '';
-            function consumeLines() {
-                let idx;
-                while ((idx = buffer.indexOf('\n')) >= 0) {
-                    const line = buffer.slice(0, idx).trim();
-                    buffer = buffer.slice(idx + 1);
-                    if (!line) continue;
-                    if (line.startsWith('data:')) {
-                        const payload = line.startsWith('data: ') ? line.slice(6).trim() : line.slice(5).trim();
-                        if (!payload) continue;
-                        try { onDataObj(JSON.parse(payload)); } catch (e) {}
-                    }
-                }
-            }
-            while (true) {
-                const { value, done } = await reader.read();
-                if (done) {
-                    consumeLines();
-                    break;
-                }
-                buffer += decoder.decode(value, { stream: true });
-                consumeLines();
-            }
-        }
-
+        // Main Execution Logic
         const runBtn = document.getElementById('run-btn');
         runBtn.onclick = async () => {
             const image = document.getElementById('image').value;
             const cmd = document.getElementById('cmd').value;
+            
             isExecuting = true;
-            document.getElementById('terminal').innerHTML = '<div class="ln text-cyan-400"># System initializing…</div>';
+            document.getElementById('terminal').innerHTML = '<span class="text-blue-500"># System initializing...</span>';
             document.getElementById('result-panel').classList.add('hidden');
             runBtn.disabled = true;
+            
             const statusBadge = document.getElementById('job-status');
             statusBadge.textContent = 'Active';
-            statusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] bg-cyan-950 text-cyan-300 font-bold uppercase animate-pulse';
-
-            const decoder = new TextDecoder();
-            const payload = () => JSON.stringify({
-                task: 'manual_trigger',
-                input: {},
-                agent_id: 'agent_402',
-                image, cmd
-            });
+            statusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] bg-blue-900 text-blue-400 font-bold uppercase tracking-tighter animate-pulse';
 
             try {
                 let response = await fetch('/execute/stream', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
-                    body: payload(),
-                    cache: 'no-store'
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        task: 'manual_trigger',
+                        input: {},
+                        agent_id: 'agent_402',
+                        image: image,
+                        cmd: cmd
+                    })
                 });
 
                 if (response.status === 402) {
-                    appendLog('402 Payment Required — submitting x402 payment…');
+                    appendLog('> Received 402 Payment Required. Initiating real-time x402 payment...');
+                    
                     const payRes = await fetch('/api/pay', { method: 'POST' });
                     const payData = await payRes.json();
+                    
                     if (payData.hash) {
-                        appendLog('Payment accepted · TX ' + payData.hash.slice(0, 12) + '…');
-                        appendLog('> Opening paid execution stream (ledger checks may take a few seconds)…');
-                        void burstRefreshWallets(8, 400);
-                        void syncActivityFeed();
+                        const txHash = payData.hash;
+                        appendLog(`> x402 Payment successful! TX: ${txHash.slice(0, 8)}...`);
+                        await new Promise(r => setTimeout(r, 2000));
+                        
                         response = await fetch('/execute/stream', {
                             method: 'POST',
-                            headers: {
+                            headers: { 
                                 'Content-Type': 'application/json',
-                                'Accept': 'text/event-stream',
-                                'X-Stellar-Payment-Tx': payData.hash
+                                'X-Stellar-Payment-Tx': txHash
                             },
-                            body: payload(),
-                            cache: 'no-store'
+                            body: JSON.stringify({
+                                task: 'manual_trigger',
+                                input: {},
+                                agent_id: 'agent_402',
+                                image: image,
+                                cmd: cmd
+                            })
                         });
                     } else {
-                        appendLog('[FATAL] Payment failed: ' + (payData.error || 'unknown'));
+                        appendLog(`[FATAL] Payment failed: ${payData.error || 'Unknown error'}`);
                         return;
                     }
                 }
 
                 if (!response.ok) {
-                    let msg = 'HTTP ' + response.status;
-                    try {
-                        const err = await response.json();
-                        msg = err.message || err.error || msg;
-                    } catch (e) {}
-                    appendLog('[FATAL] ' + msg);
-                    return;
-                }
-                if (!response.body) {
-                    appendLog('[FATAL] No response stream');
+                    const errorData = await response.json();
+                    appendLog(`[FATAL] Execution failed (${response.status}): ${errorData.message || errorData.error || 'Unknown error'}`);
                     return;
                 }
 
-                await parseSSEStream(response.body.getReader(), decoder, (data) => {
-                    if (data.line) {
-                        if (data.line.includes('Waiting for Stellar ledger')) {
-                            statusBadge.textContent = 'Indexing';
-                            statusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] bg-amber-950 text-amber-300 font-bold uppercase animate-pulse';
+                if (!response.body) {
+                    appendLog('[FATAL] No response body received from executor.');
+                    return;
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                        const trimmedLine = line.trim();
+                        if (trimmedLine.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(trimmedLine.slice(6));
+                                if (data.line) {
+                                    if (data.line.includes('Authorization verified')) {
+                                        appendTX('AUTH (x402)', '0.05 XLM', 'auth_' + Math.random().toString(36).substring(7));
+                                    }
+                                    if (data.line.includes('Waiting for Stellar ledger')) {
+                                        statusBadge.textContent = 'Indexing...';
+                                        statusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] bg-amber-900 text-amber-400 font-bold uppercase tracking-tighter animate-pulse';
+                                    }
+                                    if (data.line.includes('Signing execution result')) {
+                                        appendTX('SIGN', '0.00000 XLM', 'sig_' + Math.random().toString(36).substring(7));
+                                    }
+                                    appendLog(data.line);
+                                } else if (data.job_id) {
+                                    showResultPanel(data);
+                                }
+                            } catch (e) {}
                         }
-                        appendLog(data.line);
-                    } else if (data.job_id) {
-                        showResultPanel(data);
                     }
-                });
+                }
             } catch (err) {
-                appendLog('[FATAL] ' + (err && err.message ? err.message : String(err)));
+                appendLog(`[FATAL] ${err.message}`);
             } finally {
                 isExecuting = false;
                 runBtn.disabled = false;
-                await burstRefreshWallets(5, 500);
-                await syncActivityFeed();
-                await updateWallets(true);
+                updateWallets();
             }
         };
 
+        // Background Polling
         async function backgroundSync() {
             try {
                 const res = await fetch('/execute/status');
-                if (res.ok) updateFlowUI(await res.json());
-                await updateWallets(false);
-                await syncActivityFeed();
-            } catch (e) {}
+                if (res.ok) {
+                    const data = await res.json();
+                    updateFlowUI(data);
+                }
+                await updateWallets();
+            } catch (err) {}
         }
 
-        document.getElementById('x402-prepare-btn').onclick = async () => {
-            const src = document.getElementById('x402-source').value.trim();
-            const out = document.getElementById('x402-xdr-out');
-            if (!src) {
-                alert('Enter your Stellar public key (G…)');
-                return;
-            }
-            try {
-                const r = await fetch('/api/x402/prepare-payment', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ source_public_key: src })
-                });
-                const j = await r.json();
-                out.classList.remove('hidden');
-                if (!r.ok) {
-                    out.value = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail || j, null, 2);
-                    return;
-                }
-                out.value = (j.transaction_xdr || '') + '\n\n' + (Array.isArray(j.next_steps) ? j.next_steps.join('\n') : '');
-            } catch (e) {
-                out.classList.remove('hidden');
-                out.value = String(e);
-            }
-        };
-
-        loadTerminal();
-        const last = localStorage.getItem('last_result');
-        if (last) try { showResultPanel(JSON.parse(last)); } catch (e) {}
+        // Initialization
+        loadLogs();
         updateWallets();
-        setInterval(() => { backgroundSync(); }, 1400);
-        backgroundSync();
+        setInterval(backgroundSync, 2000);
     </script>
 </body>
 </html>
