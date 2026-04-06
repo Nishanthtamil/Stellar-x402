@@ -24,19 +24,30 @@ from api.services.activity_log import push_event, get_events, clear_events
 import json
 import asyncio
 
+def _should_open_browser() -> bool:
+    if os.getenv("DISABLE_AUTO_BROWSER", "").strip().lower() in ("1", "true", "yes"):
+        return False
+    if os.path.exists("/.dockerenv"):
+        return False
+    return True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Auto-open browser on startup
-    def open_browser():
-        time.sleep(1.5)
-        url = "http://127.0.0.1:8000"
-        print(f"\n[SYSTEM] Launching Dashboard: {url}\n")
-        try:
-            webbrowser.open(url)
-        except Exception:
-            pass
-    
-    threading.Thread(target=open_browser, daemon=True).start()
+    if _should_open_browser():
+
+        def open_browser():
+            time.sleep(1.5)
+            host = os.getenv("BROWSER_OPEN_HOST", "127.0.0.1")
+            port = os.getenv("PORT", "8000")
+            url = f"http://{host}:{port}"
+            print(f"\n[SYSTEM] Launching Dashboard: {url}\n")
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+
+        threading.Thread(target=open_browser, daemon=True).start()
     yield
 
 app = FastAPI(title="Stellarpay Executor API", lifespan=lifespan)

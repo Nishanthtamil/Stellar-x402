@@ -1,4 +1,5 @@
 import asyncio
+import os
 import queue
 import threading
 import time
@@ -9,6 +10,17 @@ from docker.errors import APIError, ImageNotFound
 
 _LOG_END = object()
 _LOG_NO_CHUNK = object()
+
+
+def _simulation_allowed() -> bool:
+    v = os.getenv("ALLOW_DOCKER_SIMULATION", "").strip().lower()
+    return v in ("1", "true", "yes")
+
+
+def _keep_job_container() -> bool:
+    """If true, do not remove the job container after run (easier to see in Docker Desktop). Dev only."""
+    v = os.getenv("DOCKER_KEEP_CONTAINERS", "").strip().lower()
+    return v in ("1", "true", "yes")
 
 
 class DockerRunner:
@@ -34,13 +46,15 @@ class DockerRunner:
             client = docker.from_env()
             client.ping() # Verify actual connectivity
         except Exception as e:
-            # FALLBACK: Simulation mode if Docker is missing
-            yield f"[WARN] Docker daemon not available: {e}"
-            yield "> [SIMULATION] Entering mock execution environment..."
-            await asyncio.sleep(1)
-            yield f"> [SIMULATION] Running command: {cmd}"
-            await asyncio.sleep(2)
-            yield "SUCCESS: Mock execution completed."
+            if _simulation_allowed():
+                yield f"[WARN] Docker daemon not available: {e}"
+                yield "> [SIMULATION] Entering mock execution environment..."
+                await asyncio.sleep(1)
+                yield f"> [SIMULATION] Running command: {cmd}"
+                await asyncio.sleep(2)
+                yield "SUCCESS: Mock execution completed."
+                return
+            yield f"[ERROR] Docker is required but the daemon is not reachable: {e}"
             return
 
         container = None
@@ -67,6 +81,10 @@ class DockerRunner:
                     pids_limit=64,
                     read_only=True,
                     security_opt=["no-new-privileges"],
+                    labels={
+                        "stellar-x402.executor-job": "true",
+                        "stellar-x402.kind": "docker-runner",
+                    },
                 )
                 container.start()
             start_time = time.time()
@@ -135,7 +153,7 @@ class DockerRunner:
         except Exception as e:
             yield f"[ERROR] Runtime error: {str(e)}"
         finally:
-            if container:
+            if container and not _keep_job_container():
                 try:
                     container.remove(force=True)
                 except Exception:

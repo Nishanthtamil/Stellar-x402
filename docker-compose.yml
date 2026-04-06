@@ -1,6 +1,44 @@
+# Stack: API container talks to the host Docker Engine via mounted socket (runs per-job containers there).
+# 1. Copy .env.example -> .env and fill keys.
+# 2. docker compose up --build
+# 3. Open http://localhost:8000
+#
+# Docker Desktop: expand the "stellar-x402" app to see api (port 8000) + redis.
+# Per-job containers are removed after each run — use docker events or Launch process,
+# then quickly check Containers, or set DOCKER_KEEP_CONTAINERS=true (dev only).
+#
+# Windows + Docker Desktop: the socket bind usually works as-is.
+# Linux: ensure your user can access /var/run/docker.sock (docker group).
+
+name: stellar-x402
+
 services:
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-    restart: always
+    restart: unless-stopped
+
+  api:
+    build: .
+    container_name: stellar-x402-api
+    image: stellar-x402-api:local
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      ALLOW_DOCKER_SIMULATION: "false"
+      DISABLE_AUTO_BROWSER: "true"
+      HOST: "0.0.0.0"
+      PORT: "8000"
+      # Inside the container, discovery must use host-mapped URL for external callers
+      # PUBLIC_BASE_URL: http://localhost:8000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - redis
+    restart: unless-stopped
+    labels:
+      org.opencontainers.image.title: "Stellar x402 API"
+      com.stellar-x402.role: "api"

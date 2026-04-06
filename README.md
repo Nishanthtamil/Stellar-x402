@@ -129,6 +129,22 @@ pub struct Agent {
 4. **Explore Agent Vault**:
    Open `http://127.0.0.1:8000` and choose **Agent Vault** in the sidebar for the pipeline view and on-chain ledger.
 
+### Run with Docker Compose (executor uses real Docker)
+
+The **`api`** service mounts the **host Docker socket** so job containers run on your machine’s Docker Engine (no simulation).
+
+1. Copy **`.env.example`** → **`.env`** and set keys (or keep your existing `.env`).
+2. Optionally set **`PUBLIC_BASE_URL=http://localhost:8000`** in `.env` so discovery URLs are correct from outside the container.
+3. From the repo root:
+   ```powershell
+   docker compose up --build
+   ```
+4. Open **http://localhost:8000** (the app does not auto-open a browser inside the container).
+
+**Requirements:** Docker Desktop (Windows/macOS) or Linux Docker with permission to use `/var/run/docker.sock`. Without a working socket mount, runs will fail fast with a Docker reachability error unless you set **`ALLOW_DOCKER_SIMULATION=true`** (dev only).
+
+**Docker Desktop:** The project is named **`stellar-x402`**. Expand it to see **`stellar-x402-api`** (image `stellar-x402-api:local`, port **8000**) and **redis**. When you **Launch process**, short-lived containers from image **`python:3.11-slim`** (etc.) are created on the host and **removed when the job finishes**—so they may not appear as “running” for long. To keep them for inspection, set **`DOCKER_KEEP_CONTAINERS=true`** in `.env` (**dev only**); they are labeled **`stellar-x402.executor-job=true`**.
+
 ### Discovery & production URL
 
 - **`GET /api/discovery`** — Loads `agent_metadata.json` and, if set, rewrites `endpoint` / adds URLs using **`PUBLIC_BASE_URL`** (no trailing slash). Also includes an **`x402`** block (amount, destination, `prepare_unsigned_transaction` URL).

@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Header, Response
 from fastapi.responses import StreamingResponse
+
 from api.models.job import JobRequest, JobResult, JobStatus
+from api.services.activity_log import push_event
 from api.services.docker_runner import docker_runner
+from api.services.registry_client import registry_client
 from api.services.signer import result_signer
 from api.services.validator import validate_execution_output
-from api.services.registry_client import registry_client
-from api.services.activity_log import push_event
+from api.services import x402_facilitator_service
 from decimal import Decimal
 from stellar_sdk import Server
 from stellar_sdk.exceptions import NotFoundError
@@ -113,79 +115,142 @@ async def deactivate_agent(agent_id: str):
 
 @router.post("/stream")
 async def execute_stream(
-    request: JobRequest, 
-    x_stellar_payment_tx: str = Header(None),
-    response: Response = Response()
+    request: JobRequest,
+    x_stellar_payment_tx: str = Header(None, alias="X-Stellar-Payment-Tx"),
+    x_payment: str = Header(None, alias="X-Payment"),
+    payment_signature: str = Header(None, alias="Payment-Signature"),
+    response: Response = Response(),
 ):
-    # PRD v4: x402 Protocol Implementation (Payment = Authorization)
-    if not x_stellar_payment_tx:
-        # Return 402 Payment Required
+    # Payment = authorization: official x402 v2 (X-Payment + facilitator) or legacy XLM tx hash.
+    tx_header = (x_stellar_payment_tx or "").strip()
+    payment_header = (x_payment or payment_signature or "").strip()
+    use_facilitator = bool(payment_header) and x402_facilitator_service.facilitator_enabled()
+
+    if not payment_header and not tx_header:
         response.status_code = 402
-        return {
+        body: dict = {
             "error": "Payment Required",
-            "message": "Authorization via x402 required. Please pay 0.05 XLM to the executor address.",
-            "destination": os.getenv("EXECUTOR_PUBLIC_KEY"),
-            "amount": "0.05",
-            "asset": "XLM",
-            "link": "https://stellar.org/protocol/x402"
+            "message": (
+                "Use x402 v2: pay per facilitator, then retry with X-Payment (JSON PaymentPayload). "
+                "Or use legacy flow: 0.05 native XLM to the executor and pass X-Stellar-Payment-Tx."
+            ),
+            "documentation": "https://developers.stellar.org/docs/build/agentic-payments/x402",
+            "legacy": {
+                "destination": os.getenv("EXECUTOR_PUBLIC_KEY"),
+                "amount": "0.05",
+                "asset": "native",
+                "header": "X-Stellar-Payment-Tx",
+                "prepare_unsigned_transaction": "/api/x402/prepare-payment",
+            },
         }
+        if x402_facilitator_service.facilitator_enabled():
+            try:
+                body.update(x402_facilitator_service.build_payment_required_dict())
+            except ValueError as e:
+                body["x402_configuration_error"] = str(e)
+            body["facilitator"] = {
+                "url": x402_facilitator_service.facilitator_base_url(),
+                "retry_header": "X-Payment",
+                "note": (
+                    "Default requirement uses USDC on Stellar (see X402_PRICE / X402_STELLAR_ASSET). "
+                    "Executor account must be able to receive that asset."
+                ),
+            }
+        return body
 
     job_id = str(uuid.uuid4())
     
     async def event_generator():
         output_acc = []
         
-        # Step 1: Wallet Auth (Verified via x402)
+        # Step 1: Wallet auth — facilitator (x402 v2) or legacy Horizon XLM
         latest_job_state["status"] = "authorizing"
         latest_job_state["step"] = 1
-        push_event(
-            kind="execute",
-            severity="info",
-            title="Verifying x402 payment",
-            detail=f"TX {x_stellar_payment_tx[:12]}… · Horizon lookup",
-            hash_short=x_stellar_payment_tx[:8],
-        )
-        yield f"data: {json.dumps({'line': f'> Verifying x402 authorization (TX: {x_stellar_payment_tx[:8]}...)'})}\n\n"
-        
-        # Move verification inside stream — yield before each Horizon round-trip so the UI never looks hung
-        payment_valid = False
-        for attempt in range(_VERIFY_ATTEMPTS):
-            yield f"data: {json.dumps({'line': f'> Ledger check {attempt + 1}/{_VERIFY_ATTEMPTS} (querying Horizon for payment)…'})}\n\n"
-            payment_valid = await _verify_payment(x_stellar_payment_tx)
-            if payment_valid:
-                break
-            yield f"data: {json.dumps({'line': f'> Not indexed or not matched yet; retrying in {_VERIFY_INTERVAL_SEC:.0f}s…'})}\n\n"
-            await asyncio.sleep(_VERIFY_INTERVAL_SEC)
 
-        if not payment_valid:
+        if use_facilitator:
             push_event(
                 kind="execute",
-                severity="error",
-                title="Payment verification failed",
-                detail=f"Could not confirm {x_stellar_payment_tx[:12]}… on-chain",
-                hash_short=x_stellar_payment_tx[:8],
+                severity="info",
+                title="Verifying x402 (facilitator)",
+                detail=f"POST {x402_facilitator_service.facilitator_base_url()}/verify",
             )
-            yield f"data: {json.dumps({'line': f'[ERROR] Could not verify payment {x_stellar_payment_tx[:8]} on-chain.'})}\n\n"
-            latest_job_state["status"] = "failed"
-            latest_job_state["step"] = 0
-            return
+            yield f"data: {json.dumps({'line': '> Verifying X-Payment with facilitator…'})}\n\n"
+            ok, msg, settle_tx = await x402_facilitator_service.verify_and_settle(payment_header)
+            if not ok:
+                push_event(
+                    kind="execute",
+                    severity="error",
+                    title="Facilitator payment failed",
+                    detail=msg[:200],
+                )
+                yield f"data: {json.dumps({'line': f'[ERROR] Facilitator: {msg}'})}\n\n"
+                latest_job_state["status"] = "failed"
+                latest_job_state["step"] = 0
+                return
+            short = (settle_tx or "unknown")[:8]
+            latest_job_state["last_tx"] = {
+                "type": "AUTH (x402-facilitator)",
+                "amount": (os.getenv("X402_PRICE") or "0.01") + " USDC",
+                "id": short,
+            }
+            push_event(
+                kind="execute",
+                severity="success",
+                title="x402 facilitator authorized",
+                detail=msg + (f" · tx {settle_tx[:12]}…" if settle_tx else ""),
+                hash_short=short,
+                hash_full=settle_tx,
+            )
+            yield f"data: {json.dumps({'line': '> Authorization verified via x402 facilitator.'})}\n\n"
+        else:
+            push_event(
+                kind="execute",
+                severity="info",
+                title="Verifying x402 payment",
+                detail=f"TX {tx_header[:12]}… · Horizon lookup",
+                hash_short=tx_header[:8],
+            )
+            yield f"data: {json.dumps({'line': f'> Verifying legacy XLM payment (TX: {tx_header[:8]}...)'})}\n\n"
 
-        latest_job_state["last_tx"] = {
-            "type": "AUTH (x402)", 
-            "amount": "0.05 XLM", 
-            "id": x_stellar_payment_tx[:8]
-        }
-        push_event(
-            kind="execute",
-            severity="success",
-            title="x402 authorized",
-            detail="Payment verified · proceeding to registry",
-            hash_short=x_stellar_payment_tx[:8],
-            hash_full=x_stellar_payment_tx,
-            amount_xlm="0.05",
-        )
-        yield f"data: {json.dumps({'line': f'> Authorization verified via x402.'})}\n\n"
-        await asyncio.sleep(1) 
+            payment_valid = False
+            for attempt in range(_VERIFY_ATTEMPTS):
+                yield f"data: {json.dumps({'line': f'> Ledger check {attempt + 1}/{_VERIFY_ATTEMPTS} (querying Horizon for payment)…'})}\n\n"
+                payment_valid = await _verify_payment(tx_header)
+                if payment_valid:
+                    break
+                yield f"data: {json.dumps({'line': f'> Not indexed or not matched yet; retrying in {_VERIFY_INTERVAL_SEC:.0f}s…'})}\n\n"
+                await asyncio.sleep(_VERIFY_INTERVAL_SEC)
+
+            if not payment_valid:
+                push_event(
+                    kind="execute",
+                    severity="error",
+                    title="Payment verification failed",
+                    detail=f"Could not confirm {tx_header[:12]}… on-chain",
+                    hash_short=tx_header[:8],
+                )
+                yield f"data: {json.dumps({'line': f'[ERROR] Could not verify payment {tx_header[:8]} on-chain.'})}\n\n"
+                latest_job_state["status"] = "failed"
+                latest_job_state["step"] = 0
+                return
+
+            latest_job_state["last_tx"] = {
+                "type": "AUTH (x402-legacy-xlm)",
+                "amount": "0.05 XLM",
+                "id": tx_header[:8],
+            }
+            push_event(
+                kind="execute",
+                severity="success",
+                title="x402 authorized (legacy XLM)",
+                detail="Payment verified · proceeding to registry",
+                hash_short=tx_header[:8],
+                hash_full=tx_header,
+                amount_xlm="0.05",
+            )
+            yield f"data: {json.dumps({'line': '> Authorization verified (Horizon).'})}\n\n"
+
+        await asyncio.sleep(1)
         
         # Step 2: Registry Check
         latest_job_state["status"] = "registry"

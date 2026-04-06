@@ -42,12 +42,31 @@ def build_discovery_payload() -> dict:
         }
 
     fallback_base = base or "http://127.0.0.1:8000"
+    facilitator_url = (os.getenv("X402_FACILITATOR_URL") or "https://x402.org/facilitator").rstrip(
+        "/"
+    )
+    facilitator_on = os.getenv("X402_FACILITATOR_ENABLED", "true").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+
     out["x402"] = {
         "amount_xlm": X402_AMOUNT_XLM,
         "asset": "native",
         "destination": executor or None,
-        "flow": "POST /execute/stream without payment header → 402 → pay → retry with X-Stellar-Payment-Tx",
+        "flow": (
+            "POST /execute/stream without payment → 402 → "
+            "pay via facilitator (X-Payment / USDC default) or legacy 0.05 XLM + X-Stellar-Payment-Tx"
+        ),
         "prepare_unsigned_transaction": f"{fallback_base}/api/x402/prepare-payment",
+        "facilitator_url": facilitator_url if facilitator_on else None,
+        "facilitator_enabled": facilitator_on,
+        "payment_headers": {
+            "x402_v2": "X-Payment or Payment-Signature (JSON PaymentPayload after client pays)",
+            "legacy_native_xlm": "X-Stellar-Payment-Tx (transaction hash)",
+        },
+        "stellar_x402_docs": "https://developers.stellar.org/docs/build/agentic-payments/x402",
     }
 
     return out

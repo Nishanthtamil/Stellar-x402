@@ -1,0 +1,17 @@
+.git
+.github
+.cursor
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+**/venv
+.env
+*.md
+!README.md
+!EXECUTOR_SKILL.md
+contracts/target
+tests
+.pytest_cache
+terminals
+docs
