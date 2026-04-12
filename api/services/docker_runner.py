@@ -61,7 +61,11 @@ def _keep_job_container() -> bool:
     return v in ("1", "true", "yes")
 
 
+<<<<<<< HEAD
 class OpenClawRunner:
+=======
+class DockerRunner:
+>>>>>>> ffacaeb7c5284033a65db2ed2abad5f5d596ce61
     def __init__(self):
         # We don't store a persistent client because it's not thread-safe for many overlapping runs.
         # We only check once if Docker is available to avoid spamming errors if it's down.
@@ -118,11 +122,19 @@ class OpenClawRunner:
 
         try:
             labels = {
+<<<<<<< HEAD
                 "openclaw.executor-job": "true",
                 "openclaw.kind": "docker-runner",
             }
             if job_id:
                 labels["openclaw.job-id"] = job_id
+=======
+                "stellar-x402.executor-job": "true",
+                "stellar-x402.kind": "docker-runner",
+            }
+            if job_id:
+                labels["stellar-x402.job-id"] = job_id
+>>>>>>> ffacaeb7c5284033a65db2ed2abad5f5d596ce61
             with self._lifecycle_lock:
                 mem_limit = "256m"
                 if network_enabled or "playwright" in image:
@@ -173,7 +185,11 @@ class OpenClawRunner:
                         container.kill()
                     except Exception:
                         pass
+<<<<<<< HEAD
                     yield "[ERROR] Job canceled by client (OpenClaw)."
+=======
+                    yield "[ERROR] Job canceled by client."
+>>>>>>> ffacaeb7c5284033a65db2ed2abad5f5d596ce61
                     break
                 if time.time() - start_time > timeout:
                     try:
@@ -181,7 +197,11 @@ class OpenClawRunner:
                     except Exception:
                         pass
                     timed_out = True
+<<<<<<< HEAD
                     yield f"[TIMEOUT] Execution exceeded {timeout}s limit (OpenClaw)."
+=======
+                    yield f"[TIMEOUT] Execution exceeded {timeout}s limit."
+>>>>>>> ffacaeb7c5284033a65db2ed2abad5f5d596ce61
                     break
 
                 try:
@@ -214,12 +234,21 @@ class OpenClawRunner:
             if timed_out:
                 pass
             elif oom_killed or exit_code == 137:
+<<<<<<< HEAD
                 yield "[ERROR] Container killed due to OOM (OpenClaw)."
             elif exit_code != 0 and not state.get("Running"):
                 yield f"[ERROR] Process exited with code {exit_code} (OpenClaw)."
 
         except ImageNotFound:
             yield f"[ERROR] Image '{image}' not found (OpenClaw)."
+=======
+                yield "[ERROR] Container killed due to OOM (Out of Memory)."
+            elif exit_code != 0 and not state.get("Running"):
+                yield f"[ERROR] Process exited with code {exit_code}."
+
+        except ImageNotFound:
+            yield f"[ERROR] Image '{image}' not found."
+>>>>>>> ffacaeb7c5284033a65db2ed2abad5f5d596ce61
         except APIError as e:
             yield f"[ERROR] Docker API error: {str(e)}"
         except Exception as e:
@@ -240,4 +269,8 @@ class OpenClawRunner:
                 pass
 
 
+<<<<<<< HEAD
 docker_runner = OpenClawRunner()
+=======
+docker_runner = DockerRunner()
+>>>>>>> ffacaeb7c5284033a65db2ed2abad5f5d596ce61
