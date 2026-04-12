@@ -12,13 +12,14 @@ client = TestClient(app)
 @pytest.mark.docker
 def test_execute_stream_endpoint(monkeypatch):
     """x402 requires a payment header; bypass on-chain verify and registry for the test."""
+    monkeypatch.setenv("REGISTRY_BYPASS_DEV", "true")
     monkeypatch.setattr(
         "api.routers.execute._verify_payment",
         AsyncMock(return_value=True),
     )
     mock_rc = MagicMock()
     mock_rc.contract_id = None
-    mock_rc.get_agent.return_value = None
+    mock_rc.get_agent_record.return_value = None
     mock_rc.update_reputation.return_value = None
     monkeypatch.setattr("api.routers.execute.registry_client", mock_rc)
 

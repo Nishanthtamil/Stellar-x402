@@ -90,7 +90,8 @@ class RegistryClient:
 
         simulate_response = self.soroban_server.simulate_transaction(tx)
         if simulate_response.error:
-            return None
+            # Distinguish RPC/contract errors from "agent not in registry" (Option::None).
+            raise RuntimeError(str(simulate_response.error))
 
         if not simulate_response.results:
             return None

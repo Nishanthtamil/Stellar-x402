@@ -31,15 +31,17 @@ def _contains_error_markers(lines: Iterable[str]) -> bool:
 
 
 def _ai_validate(output: str, requirements: dict[str, Any]) -> ValidationOutcome:
+    """Gemini-based review. Caller must only invoke when AI_OUTPUT_VALIDATION is enabled."""
     from dotenv import load_dotenv
+
     load_dotenv()
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    
+    gemini_key = (os.getenv("GEMINI_API_KEY") or "").strip()
+
     if not gemini_key:
         return ValidationOutcome(
-            verified=True,
+            verified=False,
             strategy=ValidationStrategy.RULE_BASED,
-            reason="AI validation skipped (no API key). Passed baseline rule-based validation.",
+            reason="AI_OUTPUT_VALIDATION is enabled but GEMINI_API_KEY is not set.",
         )
 
     import google.generativeai as genai
@@ -62,29 +64,33 @@ def _ai_validate(output: str, requirements: dict[str, Any]) -> ValidationOutcome
         "reason": "string explaining why"
     }}
     """
-    
+
     try:
-        # Use a model confirmed available by list_models.py
         model = genai.GenerativeModel("models/gemini-flash-latest")
         response = model.generate_content(prompt)
-        # Strip potential markdown formatting if Gemini includes it
         text = response.text.strip()
         if text.startswith("```json"):
             text = text[7:-3].strip()
         elif text.startswith("```"):
             text = text[3:-3].strip()
-            
+
         result = json.loads(text)
+        if "verified" not in result:
+            return ValidationOutcome(
+                verified=False,
+                strategy=ValidationStrategy.AI_BASED,
+                reason="AI validation response was missing a boolean `verified` field.",
+            )
         return ValidationOutcome(
-            verified=result.get("verified", False),
+            verified=bool(result["verified"]),
             strategy=ValidationStrategy.AI_BASED,
-            reason=f"AI Validation: {result.get('reason', 'No reason provided')}",
+            reason=f"AI validation: {result.get('reason', 'No reason provided')}",
         )
     except Exception as e:
         return ValidationOutcome(
-            verified=True,
+            verified=False,
             strategy=ValidationStrategy.RULE_BASED,
-            reason=f"AI validation failed with error: {str(e)}. Falling back to baseline rule-based validation.",
+            reason=f"AI validation failed: {e}",
         )
 
 
@@ -138,5 +144,25 @@ def validate_execution_output(output: str, requirements: dict[str, Any]) -> Vali
             reason="Output contained a forbidden substring.",
         )
 
-    # Use AI validation if task requires it or as a fallback for high-level tasks
-    return _ai_validate(normalized_output, requirements)
+    if "[SIMULATION]" in normalized_output:
+        return ValidationOutcome(
+            verified=False,
+            strategy=ValidationStrategy.RULE_BASED,
+            reason="Output indicates Docker simulation, not a real container run (see ALLOW_DOCKER_SIMULATION).",
+        )
+
+    ai_flag = (os.getenv("AI_OUTPUT_VALIDATION") or "").strip().lower() in ("1", "true", "yes")
+    if ai_flag:
+        return _ai_validate(normalized_output, requirements)
+
+    # No explicit expected_* and no optional AI pass: attest only what we observed on stdout.
+    return ValidationOutcome(
+        verified=True,
+        strategy=ValidationStrategy.RULE_BASED,
+        reason=(
+            "No expected_output/expected_substring in request; output is non-empty, has no "
+            "[ERROR]/[TIMEOUT] markers, and passed forbidden-substring checks. "
+            "Set expected_substring or expected_output for stronger guarantees, or "
+            "AI_OUTPUT_VALIDATION=true for Gemini review."
+        ),
+    )

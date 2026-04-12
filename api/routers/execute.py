@@ -355,11 +355,12 @@ async def execute_stream(
 
         else:
             registry_error = None
-            agent_on_chain = None
-
+            agent_record = None
             for attempt in range(3):
                 try:
-                    agent_on_chain = await asyncio.to_thread(registry_client.get_agent, request.agent_id)
+                    agent_record = await asyncio.to_thread(
+                        registry_client.get_agent_record, request.agent_id
+                    )
                     registry_error = None
                     break
                 except Exception as e:
@@ -374,13 +375,20 @@ async def execute_stream(
                 latest_job_state["step"] = 0
                 return
 
-            if not agent_on_chain:
+            if not agent_record:
                 yield f"data: {json.dumps({'line': f'[ERROR] Agent {request.agent_id} not found in registry. Job refused.'})}\n\n"
                 latest_job_state["status"] = "failed"
                 latest_job_state["step"] = 0
                 return
 
-        yield f"data: {json.dumps({'line': f'> Agent {request.agent_id} verified on-chain.'})}\n\n"
+            if agent_record.get("active") is False:
+                yield f"data: {json.dumps({'line': f'[ERROR] Agent {request.agent_id} is deactivated in the registry. Job refused.'})}\n\n"
+                latest_job_state["status"] = "failed"
+                latest_job_state["step"] = 0
+                return
+
+            yield f"data: {json.dumps({'line': f'> Agent {request.agent_id} verified on-chain (active).'})}\n\n"
+
         await asyncio.sleep(1)
         
         # Step 3: Execution
