@@ -11,7 +11,10 @@ async def test_docker_runner_missing_image():
     lines = []
     async for line in docker_runner.run("image-that-does-not-exist:latest", "echo hello"):
         lines.append(line)
-    assert any("Image 'image-that-does-not-exist:latest' not found" in line for line in lines)
+    # Allowlist runs before pull; disallowed names never reach ImageNotFound.
+    assert any(
+        "not in the allowlist" in line or "not found" in line for line in lines
+    ), lines
 
 @pytest.mark.docker
 @pytest.mark.asyncio

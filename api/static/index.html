@@ -91,6 +91,15 @@
                                 <label class="text-xs text-slate-500 mb-1 block group-focus-within:text-blue-400 transition-colors">COMMAND_ENTRYPOINT</label>
                                 <textarea id="cmd" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all">python -c "print('Booting...'); import time; time.sleep(1); print('Task started...'); time.sleep(2); print('Success.')"</textarea>
                             </div>
+                            <div class="group">
+                                <label class="text-xs text-slate-500 mb-1 block group-focus-within:text-blue-400 transition-colors">TASK_DESCRIPTION</label>
+                                <textarea id="task-desc" rows="2" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="What this run must accomplish (signed + used if AI validation is on).">Run the container command below. The job succeeds only if stdout contains the success marker and has no [ERROR] or [TIMEOUT] lines.</textarea>
+                            </div>
+                            <div class="group">
+                                <label class="text-xs text-slate-500 mb-1 block group-focus-within:text-blue-400 transition-colors">SUCCESS_MARKER (substring in stdout)</label>
+                                <input id="expected-substring" type="text" value="Success." class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Exact phrase your command must print">
+                                <p class="text-[10px] text-slate-600 mt-1.5 leading-relaxed">Validation uses this for a real pass/fail check. Set it to text your command actually prints (default matches the sample command).</p>
+                            </div>
                             <button id="run-btn" class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shadow-lg shadow-blue-900/20 transition-all active:scale-95 flex items-center justify-center group">
                                 <i class="fas fa-play mr-2 group-hover:translate-x-1 transition-transform"></i>
                                 LAUNCH PROCESS
@@ -304,13 +313,22 @@
             saveLog('terminal_logs', terminal.innerHTML);
         }
 
+        function buildJobPayload(image, cmd) {
+            const task = (document.getElementById('task-desc').value || '').trim()
+                || 'Docker job: run command in container; verify stdout against the success marker.';
+            const marker = (document.getElementById('expected-substring').value || '').trim();
+            const input = {};
+            if (marker) input.expected_substring = marker;
+            return { task, input, agent_id: 'agent_402', image, cmd };
+        }
+
         function showResultPanel(data) {
             const resultPanel = document.getElementById('result-panel');
             const statusBadge = document.getElementById('job-status');
             
             resultPanel.classList.remove('hidden');
             document.getElementById('result-title').textContent = data.verified ? 'Verified Result' : 'Execution Result';
-            document.getElementById('res-job-id').textContent = `JOB_ID: ${data.job_id.slice(0, 18)}`;
+            document.getElementById('res-job-id').textContent = `JOB_ID: ${String(data.job_id).slice(0, 18)}`;
             document.getElementById('res-time').textContent = new Date(data.timestamp).toLocaleTimeString();
             document.getElementById('res-verified').textContent = data.verified ? 'Verified' : 'Not Verified';
             document.getElementById('res-verified').className = data.verified ? 'text-base font-semibold text-green-400' : 'text-base font-semibold text-amber-400';
@@ -425,16 +443,11 @@
             statusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] bg-blue-900 text-blue-400 font-bold uppercase tracking-tighter animate-pulse';
 
             try {
+                const jobPayload = buildJobPayload(image, cmd);
                 let response = await fetch('/execute/stream', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        task: 'manual_trigger',
-                        input: {},
-                        agent_id: 'agent_402',
-                        image: image,
-                        cmd: cmd
-                    })
+                    body: JSON.stringify(jobPayload)
                 });
 
                 if (response.status === 402) {
@@ -454,13 +467,7 @@
                                 'Content-Type': 'application/json',
                                 'X-Stellar-Payment-Tx': txHash
                             },
-                            body: JSON.stringify({
-                                task: 'manual_trigger',
-                                input: {},
-                                agent_id: 'agent_402',
-                                image: image,
-                                cmd: cmd
-                            })
+                            body: JSON.stringify(jobPayload)
                         });
                     } else {
                         appendLog(`[FATAL] Payment failed: ${payData.error || 'Unknown error'}`);
@@ -505,7 +512,7 @@
                                         appendTX('SIGN', '0.00000 XLM', 'sig_' + Math.random().toString(36).substring(7));
                                     }
                                     appendLog(data.line);
-                                } else if (data.job_id) {
+                                } else if (data.job_id && data.status) {
                                     showResultPanel(data);
                                 }
                             } catch (e) {}

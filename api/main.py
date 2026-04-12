@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from api.routers import execute, x402_prep
+from api.routers import a2a_binding, execute, x402_prep
 from api.services.registry_client import registry_client
 from api.services.discovery_builder import build_discovery_payload, fetch_json_from_ipfs
 from api.services.activity_log import push_event, get_events, clear_events
@@ -55,6 +55,7 @@ app = FastAPI(title="Stellarpay Executor API", lifespan=lifespan)
 # Main Execution Router
 app.include_router(execute.router)
 app.include_router(x402_prep.router)
+app.include_router(a2a_binding.router)
 
 # Mount static files for the dashboard
 static_dir = os.path.join(os.path.dirname(__file__), "static")

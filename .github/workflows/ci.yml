@@ -30,7 +30,6 @@ jobs:
       REGISTRY_BYPASS_DEV: "true"
       PUBLIC_BASE_URL: http://localhost:8000
       X402_FACILITATOR_ENABLED: "true"
-      ALLOW_DOCKER_SIMULATION: "true"
       GEMINI_API_KEY: ""
 
     steps:

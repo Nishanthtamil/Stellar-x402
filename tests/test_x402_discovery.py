@@ -10,13 +10,21 @@ from api.main import app
 client = TestClient(app)
 
 
-def test_discovery_includes_x402_block():
+def test_discovery_includes_x402_block(monkeypatch):
+    monkeypatch.setenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000")
     r = client.get("/api/discovery")
     assert r.status_code == 200
     data = r.json()
     assert "error" not in data
     assert data["x402"]["amount_xlm"] == "0.05"
-    assert "prepare_unsigned_transaction" in data["x402"]
+    assert data["x402"]["prepare_unsigned_transaction"] == "http://127.0.0.1:8000/api/x402/prepare-payment"
+
+
+def test_discovery_prepare_url_none_without_public_base(monkeypatch):
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+    r = client.get("/api/discovery")
+    assert r.status_code == 200
+    assert r.json()["x402"].get("prepare_unsigned_transaction") is None
 
 
 def test_prepare_payment_rejects_invalid_source():

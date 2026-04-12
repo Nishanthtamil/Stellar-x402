@@ -23,7 +23,7 @@ def test_validate_stdout_hygiene_without_explicit_criteria(monkeypatch):
 
     assert result.verified is True
     assert result.strategy == ValidationStrategy.RULE_BASED
-    assert "No expected_output" in result.reason
+    assert "Basic check only" in result.reason
 
 
 def test_validate_rejects_docker_simulation_output(monkeypatch):

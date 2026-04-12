@@ -28,7 +28,6 @@ services:
     env_file:
       - .env
     environment:
-      ALLOW_DOCKER_SIMULATION: "false"
       DISABLE_AUTO_BROWSER: "true"
       HOST: "0.0.0.0"
       PORT: "8000"

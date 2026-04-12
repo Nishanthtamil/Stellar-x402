@@ -39,9 +39,12 @@ def build_discovery_payload() -> dict:
             "openapi_json": f"{base}/openapi.json",
             "prepare_x402_payment": f"{base}/api/x402/prepare-payment",
             "discovery_resolved": f"{base}/api/discovery/resolved",
+            "a2a_agent_card": f"{base}/.well-known/agent-card.json",
+            "eip8004_registration": f"{base}/.well-known/agent-registration.json",
+            "a2a_jsonrpc": f"{base}/a2a/jsonrpc",
+            "a2a_send": f"{base}/message:send",
         }
 
-    fallback_base = base or "http://127.0.0.1:8000"
     facilitator_url = (os.getenv("X402_FACILITATOR_URL") or "https://x402.org/facilitator").rstrip(
         "/"
     )
@@ -59,7 +62,7 @@ def build_discovery_payload() -> dict:
             "POST /execute/stream without payment → 402 → "
             "pay via facilitator (X-Payment / USDC default) or legacy 0.05 XLM + X-Stellar-Payment-Tx"
         ),
-        "prepare_unsigned_transaction": f"{fallback_base}/api/x402/prepare-payment",
+        "prepare_unsigned_transaction": (f"{base}/api/x402/prepare-payment" if base else None),
         "facilitator_url": facilitator_url if facilitator_on else None,
         "facilitator_enabled": facilitator_on,
         "payment_headers": {

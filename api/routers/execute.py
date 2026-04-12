@@ -36,6 +36,8 @@ async def get_flow_status():
 
 
 def _resolve_job_status(output_lines: list[str], verified: bool) -> JobStatus:
+    if any("Job canceled by client" in line for line in output_lines):
+        return JobStatus.CANCELED
     if any(line.startswith("[TIMEOUT]") for line in output_lines):
         return JobStatus.TIMEOUT
     if any(line.startswith("[ERROR]") for line in output_lines):
@@ -151,8 +153,8 @@ async def execute_sync(
                 continue
             try:
                 parsed = json.loads(payload)
-                # The final SSE event is the full JobResult (has job_id at top level)
-                if "job_id" in parsed:
+                # Final SSE event is full JobResult (job_id + status); early events may include job_id only.
+                if "job_id" in parsed and "status" in parsed:
                     final_result = parsed
                 else:
                     log_lines.append(parsed.get("line", ""))
@@ -390,103 +392,139 @@ async def execute_stream(
             yield f"data: {json.dumps({'line': f'> Agent {request.agent_id} verified on-chain (active).'})}\n\n"
 
         await asyncio.sleep(1)
-        
-        # Step 3: Execution
-        latest_job_state["status"] = "executing"
-        latest_job_state["step"] = 3
-        push_event(
-            kind="docker",
-            severity="info",
-            title="Docker execution",
-            detail=f"Image `{request.image[:40]}{'…' if len(request.image) > 40 else ''}`",
-        )
 
-        async for line in docker_runner.run(request.image, request.cmd):
-            output_acc.append(line)
-            yield f"data: {json.dumps({'line': line})}\n\n"
-        
-        latest_job_state["status"] = "finalizing"
-        latest_job_state["step"] = 4
-        push_event(
-            kind="validation",
-            severity="info",
-            title="Validating output",
-            detail=f"Job {job_id[:8]}…",
-        )
-        yield f"data: {json.dumps({'line': '> Validating execution output...'})}\n\n"
+        from api.services import docker_job_control as _djc
+        from api.services import execute_broadcast as _eb
+        from api.services import a2a_execute_hooks as _hooks
+        from api.services.a2a_task_builder import task_document_from_job_result as _task_doc
 
-        output_text = "\n".join(output_acc)
-        validation = validate_execution_output(output_text, request.model_dump())
-        signed_payload = {
-            "job_id": job_id,
-            "agent_id": request.agent_id,
-            "task": request.task,
-            "output": output_text,
-            "verified": validation.verified,
-            "validation_strategy": validation.strategy.value,
-            "validation_reason": validation.reason,
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
-        yield f"data: {json.dumps({'line': f'> Validation result: {validation.reason}'})}\n\n"
-        yield f"data: {json.dumps({'line': '> Signing execution result...'})}\n\n"
+        accepted = {"job_id": job_id, "phase": "job_accepted"}
+        await _eb.publish(job_id, accepted)
+        yield f"data: {json.dumps(accepted)}\n\n"
 
-        signature = result_signer.sign_payload(signed_payload)
-        latest_job_state["last_tx"] = {
-            "type": "SIGN",
-            "amount": "0.00000 XLM",
-            "id": job_id[:8],
-        }
-        push_event(
-            kind="sign",
-            severity="success",
-            title="Result signed",
-            detail=f"Job {job_id[:8]}… · off-chain signature",
-            job_id=job_id,
-        )
+        try:
+            # Step 3: Execution
+            latest_job_state["status"] = "executing"
+            latest_job_state["step"] = 3
+            push_event(
+                kind="docker",
+                severity="info",
+                title="Docker execution",
+                detail=f"Image `{request.image[:40]}{'…' if len(request.image) > 40 else ''}`",
+            )
 
-        status = _resolve_job_status(output_acc, validation.verified)
-        
-        # Update reputation on-chain
-        if status == JobStatus.COMPLETED:
-            try:
-                await asyncio.to_thread(registry_client.update_reputation, request.agent_id, 1)
-                yield f"data: {json.dumps({'line': f'> Agent {request.agent_id} reputation updated (+1) on-chain.'})}\n\n"
-            except Exception as e:
-                yield f"data: {json.dumps({'line': f'[WARN] Failed to update reputation: {e}'})}\n\n"
-        elif status == JobStatus.FAILED:
-            try:
-                await asyncio.to_thread(registry_client.update_reputation, request.agent_id, -1)
-                yield f"data: {json.dumps({'line': f'> Agent {request.agent_id} reputation decreased (-1) due to failure.'})}\n\n"
-            except Exception as e:
-                yield f"data: {json.dumps({'line': f'[WARN] Failed to update reputation: {e}'})}\n\n"
+            await _hooks.on_job_running(job_id, request)
 
-        latest_job_state["status"] = "completed" if status == JobStatus.COMPLETED else "failed"
-        push_event(
-            kind="job",
-            severity="success" if status == JobStatus.COMPLETED else "error",
-            title="Job " + ("completed" if status == JobStatus.COMPLETED else "failed"),
-            detail=validation.reason[:120] if validation.reason else str(status.value),
-            job_id=job_id,
-        )
+            async for line in docker_runner.run(
+                request.image,
+                request.cmd,
+                job_id=job_id,
+                cancel_check=_djc.cancel_check_factory(job_id),
+            ):
+                output_acc.append(line)
+                pl = {"line": line}
+                await _eb.publish(job_id, pl)
+                yield f"data: {json.dumps(pl)}\n\n"
 
-        result = JobResult(
-            job_id=job_id,
-            status=status,
-            output=output_text,
-            verified=validation.verified,
-            validation_strategy=validation.strategy,
-            validation_reason=validation.reason,
-            signature=signature,
-            pubkey=result_signer.public_key,
-            signed_payload=signed_payload,
-            timestamp=signed_payload["timestamp"],
-        )
-        yield f"data: {result.model_dump_json()}\n\n"
-        
-        await asyncio.sleep(5)
-        latest_job_state["status"] = "idle"
-        latest_job_state["step"] = 0
-        latest_job_state["last_tx"] = None
+            latest_job_state["status"] = "finalizing"
+            latest_job_state["step"] = 4
+            push_event(
+                kind="validation",
+                severity="info",
+                title="Validating output",
+                detail=f"Job {job_id[:8]}…",
+            )
+            yield f"data: {json.dumps({'line': '> Validating execution output...'})}\n\n"
+
+            output_text = "\n".join(output_acc)
+            validation = validate_execution_output(output_text, request.model_dump())
+            signed_payload = {
+                "job_id": job_id,
+                "agent_id": request.agent_id,
+                "task": request.task,
+                "output": output_text,
+                "verified": validation.verified,
+                "validation_strategy": validation.strategy.value,
+                "validation_reason": validation.reason,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+            yield f"data: {json.dumps({'line': f'> Validation result: {validation.reason}'})}\n\n"
+            yield f"data: {json.dumps({'line': '> Signing execution result...'})}\n\n"
+
+            signature = result_signer.sign_payload(signed_payload)
+            latest_job_state["last_tx"] = {
+                "type": "SIGN",
+                "amount": "0.00000 XLM",
+                "id": job_id[:8],
+            }
+            push_event(
+                kind="sign",
+                severity="success",
+                title="Result signed",
+                detail=f"Job {job_id[:8]}… · off-chain signature",
+                job_id=job_id,
+            )
+
+            status = _resolve_job_status(output_acc, validation.verified)
+
+            # Update reputation on-chain
+            if status == JobStatus.COMPLETED:
+                try:
+                    await asyncio.to_thread(registry_client.update_reputation, request.agent_id, 1)
+                    yield f"data: {json.dumps({'line': f'> Agent {request.agent_id} reputation updated (+1) on-chain.'})}\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'line': f'[WARN] Failed to update reputation: {e}'})}\n\n"
+            elif status == JobStatus.FAILED:
+                try:
+                    await asyncio.to_thread(registry_client.update_reputation, request.agent_id, -1)
+                    yield f"data: {json.dumps({'line': f'> Agent {request.agent_id} reputation decreased (-1) due to failure.'})}\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'line': f'[WARN] Failed to update reputation: {e}'})}\n\n"
+
+            if status == JobStatus.COMPLETED:
+                latest_job_state["status"] = "completed"
+            elif status == JobStatus.CANCELED:
+                latest_job_state["status"] = "canceled"
+            else:
+                latest_job_state["status"] = "failed"
+            push_event(
+                kind="job",
+                severity="success" if status == JobStatus.COMPLETED else "error",
+                title="Job "
+                + (
+                    "completed"
+                    if status == JobStatus.COMPLETED
+                    else "canceled"
+                    if status == JobStatus.CANCELED
+                    else "failed"
+                ),
+                detail=validation.reason[:120] if validation.reason else str(status.value),
+                job_id=job_id,
+            )
+
+            result = JobResult(
+                job_id=job_id,
+                status=status,
+                output=output_text,
+                verified=validation.verified,
+                validation_strategy=validation.strategy,
+                validation_reason=validation.reason,
+                signature=signature,
+                pubkey=result_signer.public_key,
+                signed_payload=signed_payload,
+                timestamp=signed_payload["timestamp"],
+            )
+            await _hooks.on_job_terminal_a2a(job_id, _task_doc(job_id, result))
+            final_payload = json.loads(result.model_dump_json())
+            await _eb.publish(job_id, final_payload)
+            yield f"data: {result.model_dump_json()}\n\n"
+
+            await asyncio.sleep(5)
+            latest_job_state["status"] = "idle"
+            latest_job_state["step"] = 0
+            latest_job_state["last_tx"] = None
+        finally:
+            await _hooks.on_job_cleanup(job_id)
 
     return StreamingResponse(
         event_generator(),

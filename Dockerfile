@@ -17,5 +17,5 @@ COPY EXECUTOR_SKILL.md ./EXECUTOR_SKILL.md
 
 EXPOSE 8000
 
-# Real Docker required: ALLOW_DOCKER_SIMULATION=false by default in compose
+# Mount host Docker socket at runtime so job containers run on a real engine (see docker-compose.yml).
 CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -8,6 +8,7 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     TIMEOUT = "timeout"
+    CANCELED = "canceled"
 
 
 class ValidationStrategy(str, Enum):

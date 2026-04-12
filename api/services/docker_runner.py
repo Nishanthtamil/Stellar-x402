@@ -3,7 +3,7 @@ import os
 import queue
 import threading
 import time
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Callable
 
 import docker
 from docker.errors import APIError, ImageNotFound
@@ -54,11 +54,6 @@ def _image_allowed(image: str) -> bool:
     return image.strip() in _get_allowed_images()
 
 
-def _simulation_allowed() -> bool:
-    v = os.getenv("ALLOW_DOCKER_SIMULATION", "").strip().lower()
-    return v in ("1", "true", "yes")
-
-
 def _keep_job_container() -> bool:
     """If true, do not remove the job container after run (easier to see in Docker Desktop). Dev only."""
     v = os.getenv("DOCKER_KEEP_CONTAINERS", "").strip().lower()
@@ -82,7 +77,15 @@ class DockerRunner:
         except Exception:
             return False
 
-    async def run(self, image: str, cmd: str, timeout: int = 30) -> AsyncGenerator[str, None]:
+    async def run(
+        self,
+        image: str,
+        cmd: str,
+        timeout: int = 30,
+        *,
+        job_id: str | None = None,
+        cancel_check: Callable[[], bool] | None = None,
+    ) -> AsyncGenerator[str, None]:
         # Check image allowlist before doing anything else
         if not _image_allowed(image):
             allowed = sorted(_get_allowed_images())
@@ -94,14 +97,6 @@ class DockerRunner:
             client = docker.from_env()
             client.ping()  # Verify actual connectivity
         except Exception as e:
-            if _simulation_allowed():
-                yield f"[WARN] Docker daemon not available: {e}"
-                yield "> [SIMULATION] Entering mock execution environment..."
-                await asyncio.sleep(1)
-                yield f"> [SIMULATION] Running command: {cmd}"
-                await asyncio.sleep(2)
-                yield "SUCCESS: Mock execution completed."
-                return
             yield f"[ERROR] Docker is required but the daemon is not reachable: {e}"
             return
 
@@ -119,6 +114,12 @@ class DockerRunner:
                 log_q.put(_LOG_END)
 
         try:
+            labels = {
+                "stellar-x402.executor-job": "true",
+                "stellar-x402.kind": "docker-runner",
+            }
+            if job_id:
+                labels["stellar-x402.job-id"] = job_id
             with self._lifecycle_lock:
                 container = client.containers.create(
                     image=image,
@@ -129,12 +130,13 @@ class DockerRunner:
                     pids_limit=64,
                     read_only=True,
                     security_opt=["no-new-privileges"],
-                    labels={
-                        "stellar-x402.executor-job": "true",
-                        "stellar-x402.kind": "docker-runner",
-                    },
+                    labels=labels,
                 )
                 container.start()
+            if job_id:
+                from api.services import docker_job_control as djc
+
+                djc.register_container(job_id, container.id)
             start_time = time.time()
 
             log_iterator = container.logs(stream=True, follow=True)
@@ -151,6 +153,13 @@ class DockerRunner:
                     return _LOG_NO_CHUNK
 
             while True:
+                if cancel_check and cancel_check():
+                    try:
+                        container.kill()
+                    except Exception:
+                        pass
+                    yield "[ERROR] Job canceled by client."
+                    break
                 if time.time() - start_time > timeout:
                     try:
                         container.kill()
@@ -201,6 +210,10 @@ class DockerRunner:
         except Exception as e:
             yield f"[ERROR] Runtime error: {str(e)}"
         finally:
+            if job_id:
+                from api.services import docker_job_control as djc
+
+                djc.unregister_container(job_id)
             if container and not _keep_job_container():
                 try:
                     container.remove(force=True)

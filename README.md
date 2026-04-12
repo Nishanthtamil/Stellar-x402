@@ -135,11 +135,22 @@ Body: {"source_public_key": "G..."}
 | `POST` | `/execute/stream` | SSE streaming execution (primary) |
 | `POST` | `/execute` | Single JSON response (non-SSE clients) |
 | `GET` | `/.well-known/x402` | Standard x402 discovery |
+| `GET` | `/.well-known/agent-card.json` | **A2A v1** Agent Card ([spec](https://a2a-protocol.org/latest/specification/)) |
+| `GET` | `/.well-known/agent-registration.json` | **EIP-8004** `registration-v1` ([ERC-8004](https://eips.ethereum.org/EIPS/eip-8004)) — Stellar Soroban identity |
+| `POST` | `/message:send` | **A2A** HTTP+JSON `SendMessage` (same payment headers as `/execute`) |
+| `POST` | `/a2a/jsonrpc` | **A2A** JSON-RPC (`SendMessage`, `GetTask`, `ListTasks`, `CancelTask`) |
+| `GET` | `/tasks/{id}` · `GET` `/tasks` | **A2A** task fetch / list (in-memory; populated after `SendMessage`) |
 | `GET` | `/api/discovery` | Agent card + x402 hints |
 | `GET` | `/api/discovery/resolved` | Merged on-chain + IPFS metadata |
 | `GET` | `/api/vault` | Wallet balances + transaction history |
 | `GET` | `/api/activity` | Live event feed |
 | `POST` | `/api/pay` | Demo: auto-send 0.05 XLM (dev only) |
+
+**EIP-8004 on Stellar:** `agentRegistry` uses `stellar:{NETWORK}:{REGISTRY_CONTRACT_ID}` (not `eip155:`). `agentId` in `registrations` is the **Soroban string** agent id (e.g. `agent_402`), not an ERC-721 `tokenId`.
+
+**Honest discovery:** `/.well-known/agent-card.json` and `/.well-known/agent-registration.json` return **503** if `PUBLIC_BASE_URL` is unset (no invented host) or, for registration, if `REGISTRY_CONTRACT_ID` is unset (no empty `registrations`). Set both in `.env` for real deployments. `x402.prepare_unsigned_transaction` in `/api/discovery` is **null** until `PUBLIC_BASE_URL` is set.
+
+**A2A scope:** Agent Card + `SendMessage` / `GetTask` / `ListTasks` / `CancelTask` over HTTP+JSON and JSON-RPC. Tasks are stored **in memory** only when the run produces a real `job_id` or an **auth-required** payment state (no fake “failed” task ids for unknown stream errors). Streaming (`SendStreamingMessage`), push notifications, and in-flight **cancel** are not implemented — use `POST /execute/stream` for native SSE.
 
 ### Example request
 

@@ -148,7 +148,7 @@ def validate_execution_output(output: str, requirements: dict[str, Any]) -> Vali
         return ValidationOutcome(
             verified=False,
             strategy=ValidationStrategy.RULE_BASED,
-            reason="Output indicates Docker simulation, not a real container run (see ALLOW_DOCKER_SIMULATION).",
+            reason="Output contains [SIMULATION] markers; executor does not accept simulated Docker output.",
         )
 
     ai_flag = (os.getenv("AI_OUTPUT_VALIDATION") or "").strip().lower() in ("1", "true", "yes")
@@ -160,9 +160,8 @@ def validate_execution_output(output: str, requirements: dict[str, Any]) -> Vali
         verified=True,
         strategy=ValidationStrategy.RULE_BASED,
         reason=(
-            "No expected_output/expected_substring in request; output is non-empty, has no "
-            "[ERROR]/[TIMEOUT] markers, and passed forbidden-substring checks. "
-            "Set expected_substring or expected_output for stronger guarantees, or "
-            "AI_OUTPUT_VALIDATION=true for Gemini review."
+            "Basic check only: stdout is non-empty and has no [ERROR]/[TIMEOUT] lines. "
+            "For task-specific proof, set input.expected_substring or input.expected_output "
+            "(or enable AI_OUTPUT_VALIDATION + GEMINI_API_KEY)."
         ),
     )

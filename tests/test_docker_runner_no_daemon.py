@@ -1,4 +1,4 @@
-"""Docker required: no mock execution unless ALLOW_DOCKER_SIMULATION is set."""
+"""Docker required: unreachable daemon always fails (no mock execution)."""
 
 import pytest
 
@@ -14,8 +14,7 @@ class _UnreachablyClient:
 
 
 @pytest.mark.asyncio
-async def test_no_daemon_fails_without_simulation_flag(monkeypatch):
-    monkeypatch.delenv("ALLOW_DOCKER_SIMULATION", raising=False)
+async def test_no_daemon_fails_closed(monkeypatch):
     monkeypatch.setattr(
         "api.services.docker_runner.docker.from_env",
         lambda: _UnreachablyClient(),
@@ -25,17 +24,3 @@ async def test_no_daemon_fails_without_simulation_flag(monkeypatch):
         lines.append(line)
     assert any("Docker is required" in line and "[ERROR]" in line for line in lines)
     assert not any("SIMULATION" in line for line in lines)
-
-
-@pytest.mark.asyncio
-async def test_no_daemon_allows_simulation_when_env_set(monkeypatch):
-    monkeypatch.setenv("ALLOW_DOCKER_SIMULATION", "true")
-    monkeypatch.setattr(
-        "api.services.docker_runner.docker.from_env",
-        lambda: _UnreachablyClient(),
-    )
-    lines = []
-    async for line in DockerRunner().run("python:3.11-slim", "echo hi"):
-        lines.append(line)
-    assert any("SIMULATION" in line for line in lines)
-    assert any("Mock execution completed" in line for line in lines)
