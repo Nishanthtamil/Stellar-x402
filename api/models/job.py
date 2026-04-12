@@ -22,6 +22,8 @@ class JobRequest(BaseModel):
     agent_id: str
     image: Optional[str] = "python:3.11-slim"
     cmd: str
+    secrets: Optional[Dict[str, str]] = None
+    network_enabled: Optional[bool] = False
 
 class JobResult(BaseModel):
     job_id: str
