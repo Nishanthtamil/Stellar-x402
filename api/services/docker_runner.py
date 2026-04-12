@@ -31,6 +31,7 @@ _DEFAULT_ALLOWED_IMAGES = {
     "ubuntu:22.04",
     "ubuntu:24.04",
     "busybox:latest",
+    "mcr.microsoft.com/playwright/python:v1.45.0-jammy",
 }
 
 
@@ -83,6 +84,8 @@ class DockerRunner:
         cmd: str,
         timeout: int = 30,
         *,
+        env: dict[str, str] | None = None,
+        network_enabled: bool = False,
         job_id: str | None = None,
         cancel_check: Callable[[], bool] | None = None,
     ) -> AsyncGenerator[str, None]:
@@ -121,16 +124,28 @@ class DockerRunner:
             if job_id:
                 labels["stellar-x402.job-id"] = job_id
             with self._lifecycle_lock:
+                mem_limit = "256m"
+                if network_enabled or "playwright" in image:
+                    mem_limit = "512m"
+
+                tmpfs = {
+                    "/tmp": "size=256m",
+                    "/var/tmp": "size=64m",
+                    "/root/.cache": "size=256m",
+                }
+
                 container = client.containers.create(
                     image=image,
                     command=cmd,
-                    network_disabled=True,
-                    mem_limit="256m",
+                    environment=env,
+                    network_disabled=not network_enabled,
+                    mem_limit=mem_limit,
                     nano_cpus=int(0.5 * 1e9),
                     pids_limit=64,
                     read_only=True,
                     security_opt=["no-new-privileges"],
                     labels=labels,
+                    tmpfs=tmpfs,
                 )
                 container.start()
             if job_id:

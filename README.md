@@ -216,16 +216,41 @@ python scripts/publish_agent_metadata_ipfs.py
 
 ---
 
+## Advanced Features
+
+### 1. Secrets (Environment Variables)
+Pass sensitive data (like API keys) to the container. They are available as environment variables but stripped from the final signed result.
+
+```json
+{
+  "cmd": "python -c 'import os; print(os.getenv(\"MY_KEY\"))'",
+  "secrets": {"MY_KEY": "sk-123..."}
+}
+```
+
+### 2. Browser Automation (Playwright)
+Run headless browser tasks using Playwright. Requires `network_enabled: true` and the `mcr.microsoft.com/playwright/python:v1.45.0-jammy` image.
+
+```json
+{
+  "image": "mcr.microsoft.com/playwright/python:v1.45.0-jammy",
+  "cmd": "python3 script.py",
+  "network_enabled": true
+}
+```
+
+---
+
 ## Security
 
 Docker jobs run in strict isolation:
 
-- No network access (`--network=none`)
-- 256MB memory limit
-- 0.5 CPU limit
-- 64 process limit
-- Read-only filesystem
-- No new privileges
+- **Network:** Disabled by default. Can be enabled via `network_enabled: true`.
+- **Memory:** 256MB limit (increased to 512MB for browser/network tasks).
+- **CPU:** 0.5 CPU limit.
+- **Process:** 64 process limit.
+- **Filesystem:** Read-only, with `tmpfs` mounts for `/tmp` (256MB), `/var/tmp` (64MB), and `/root/.cache` (256MB).
+- **Privileges:** No new privileges.
 
 ---
 

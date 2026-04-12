@@ -418,6 +418,8 @@ async def execute_stream(
             async for line in docker_runner.run(
                 request.image,
                 request.cmd,
+                env=request.secrets,
+                network_enabled=request.network_enabled or False,
                 job_id=job_id,
                 cancel_check=_djc.cancel_check_factory(job_id),
             ):
@@ -437,7 +439,10 @@ async def execute_stream(
             yield f"data: {json.dumps({'line': '> Validating execution output...'})}\n\n"
 
             output_text = "\n".join(output_acc)
-            validation = validate_execution_output(output_text, request.model_dump())
+            req_dump = request.model_dump()
+            if "secrets" in req_dump:
+                del req_dump["secrets"]
+            validation = validate_execution_output(output_text, req_dump)
             signed_payload = {
                 "job_id": job_id,
                 "agent_id": request.agent_id,
