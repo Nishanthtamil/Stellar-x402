@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/main.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "api/main.py"
+    }
+  ],
+  "env": {
+    "DISABLE_AUTO_BROWSER": "1",
+    "PYTHONPATH": "."
+  }
+}
