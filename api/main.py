@@ -175,42 +175,45 @@ async def get_vault_data():
     
     deployer_pk = os.getenv("DEPLOYER_PUBLIC_KEY")
     executor_pk = os.getenv("EXECUTOR_PUBLIC_KEY")
-    registry_id = os.getenv("REGISTRY_CONTRACT_ID")
-    
+    registry_id = (os.getenv("REGISTRY_CONTRACT_ID") or "").strip() or None
+
     data = {
-        "wallets": [], 
+        "wallets": [],
         "transactions": [],
         "registry": {
             "id": registry_id,
             "agent_id": "agent_402",
             "reputation": 0,
-            "active": False
-        }
+            "active": False,
+            "owner": None,
+            "metadata_cid": None,
+            "on_chain": False,
+            "hint": None,
+        },
     }
 
-    # Fetch real on-chain agent data
-    try:
-        agent_data = await asyncio.to_thread(registry_client.get_agent, "agent_402")
-        if agent_data:
-            from stellar_sdk import xdr
-            sc_val = xdr.SCVal.from_xdr(agent_data)
-            # The contract returns Option<Agent>. If it's not Void, it's an Agent struct.
-            if sc_val.type != xdr.SCValType.SCV_VOID:
-                # Agent struct: owner (Address), metadata_cid (String), reputation (i64), active (bool)
-                if sc_val.map and sc_val.map.sc_map:
-                    for entry in sc_val.map.sc_map:
-                        # Parse key
-                        key = ""
-                        if entry.key.type == xdr.SCValType.SCV_SYMBOL:
-                            key = entry.key.sym.sc_symbol.decode()
-                        
-                        # Parse val
-                        if key == "reputation":
-                            data["registry"]["reputation"] = entry.val.i64.int64
-                        elif key == "active":
-                            data["registry"]["active"] = entry.val.b
-    except Exception as e:
-        print(f"Error fetching agent from registry: {e}")
+    rid = registry_id
+    deployer_secret = (os.getenv("DEPLOYER_SECRET") or "").strip()
+    if not rid:
+        data["registry"]["hint"] = "no_contract_id"
+    elif not deployer_secret:
+        data["registry"]["hint"] = "no_deployer_secret"
+    else:
+        try:
+            rec = await asyncio.to_thread(registry_client.get_agent_record, "agent_402")
+            if rec:
+                data["registry"]["on_chain"] = True
+                data["registry"]["hint"] = "ok"
+                data["registry"]["reputation"] = int(rec.get("reputation") or 0)
+                data["registry"]["active"] = bool(rec.get("active"))
+                data["registry"]["owner"] = rec.get("owner")
+                data["registry"]["metadata_cid"] = rec.get("metadata_cid")
+            else:
+                data["registry"]["hint"] = "agent_not_found_or_unparsable"
+        except Exception as e:
+            print(f"Error fetching agent from registry: {e}")
+            data["registry"]["hint"] = "registry_fetch_error"
+            data["registry"]["fetch_error"] = str(e)[:240]
     
     def _sync_wallet_slice(name: str, public_key: str):
         acc = server.accounts().account_id(public_key).call()

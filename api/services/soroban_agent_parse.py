@@ -10,10 +10,40 @@ from stellar_sdk.xdr.sc_address import SCAddress
 from stellar_sdk.xdr.sc_address_type import SCAddressType
 
 
-def sc_agent_map_to_dict(sc_val: xdr.SCVal) -> dict[str, Any] | None:
+def _agent_map_keys(sc_val: xdr.SCVal) -> set[str]:
+    if sc_val.type != xdr.SCValType.SCV_MAP or sc_val.map is None or not sc_val.map.sc_map:
+        return set()
+    keys: set[str] = set()
+    for entry in sc_val.map.sc_map:
+        if entry.key.type == xdr.SCValType.SCV_SYMBOL and entry.key.sym is not None:
+            keys.add(entry.key.sym.sc_symbol.decode())
+    return keys
+
+
+def _find_agent_struct_map(sc_val: xdr.SCVal) -> xdr.SCVal | None:
+    """Resolve `Agent` map inside Soroban return values (e.g. Option<Agent> as vec/union)."""
     if sc_val.type == xdr.SCValType.SCV_VOID:
         return None
-    if sc_val.type != xdr.SCValType.SCV_MAP or sc_val.map is None or not sc_val.map.sc_map:
+    if sc_val.type == xdr.SCValType.SCV_MAP and sc_val.map and sc_val.map.sc_map:
+        keys = _agent_map_keys(sc_val)
+        if "reputation" in keys and "active" in keys:
+            return sc_val
+        return None
+    if sc_val.type == xdr.SCValType.SCV_VEC and sc_val.vec is not None:
+        inner = getattr(sc_val.vec, "sc_vec", None) or []
+        for item in inner:
+            found = _find_agent_struct_map(item)
+            if found is not None:
+                return found
+    return None
+
+
+def sc_agent_map_to_dict(sc_val: xdr.SCVal) -> dict[str, Any] | None:
+    agent_map = _find_agent_struct_map(sc_val)
+    if agent_map is None:
+        return None
+    sc_val = agent_map
+    if sc_val.map is None or not sc_val.map.sc_map:
         return None
 
     out: dict[str, Any] = {}

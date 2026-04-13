@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/static/site-nav.css">
     <style>
+        html, body { height: 100%; max-height: 100%; }
         body { color: #e2e8f0; font-family: 'Inter', sans-serif; }
         .glass { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 0.5); }
         .terminal-compact { background-color: #020617; font-family: 'Fira Code', monospace; font-size: 0.75rem; border: 1px solid #1e293b; border-radius: 4px; height: 180px; overflow-y: auto; padding: 10px; }
@@ -142,7 +143,7 @@
         .vault-log-line strong { color: #e2e8f0; font-weight: 600; }
     </style>
 </head>
-<body class="site-shell min-h-screen flex flex-col overflow-hidden">
+<body class="site-shell h-screen min-h-0 flex flex-col overflow-hidden">
     <header class="global-topnav sticky top-0 z-[100]" role="banner">
         <div class="global-topnav-inner px-4 py-3 sm:px-6">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -204,8 +205,9 @@
                 </div>
             </header>
 
-            <!-- Console View -->
-            <div id="view-console" class="min-h-0 flex-1 overflow-y-auto p-6 grid grid-cols-12 gap-6">
+            <!-- Console View: outer clips; inner scrolls (reliable flex overflow) -->
+            <div id="view-console" class="min-h-0 flex-1 flex flex-col overflow-hidden">
+            <div class="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-6 grid grid-cols-12 gap-6">
                 <!-- Configuration & Launch -->
                 <div class="col-span-12 lg:col-span-4 space-y-6">
                     <div class="glass p-6 rounded-2xl glow-blue">
@@ -290,9 +292,11 @@
                     </div>
                 </div>
             </div>
+            </div>
 
-            <!-- Vault View -->
-            <div id="view-vault" class="hidden min-h-0 flex-1 overflow-y-auto p-8 space-y-12">
+            <!-- Vault View: outer clips; inner scrolls so Agent Stats / Action Ledger stay reachable -->
+            <div id="view-vault" class="hidden min-h-0 flex-1 flex flex-col overflow-hidden">
+            <div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar p-8 space-y-12 pb-16">
                 <section class="space-y-6">
                     <div class="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-2">
                         <div>
@@ -407,6 +411,7 @@
                         </div>
                     </div>
                 </div>
+            </div>
             </div>
         </main>
     </div>
@@ -547,8 +552,12 @@
 
             const lastResult = localStorage.getItem('last_result');
             if (lastResult) {
-                const data = JSON.parse(lastResult);
-                showResultPanel(data);
+                try {
+                    const data = JSON.parse(lastResult);
+                    showResultPanel(data);
+                } catch (e) {
+                    localStorage.removeItem('last_result');
+                }
             }
         }
 
@@ -611,74 +620,125 @@
         function showResultPanel(data) {
             const resultPanel = document.getElementById('result-panel');
             const statusBadge = document.getElementById('job-status');
-            
+            const jid = data.job_id != null && data.job_id !== '' ? String(data.job_id) : '';
+
             resultPanel.classList.remove('hidden');
             document.getElementById('result-title').textContent = data.verified ? 'Verified Result' : 'Execution Result';
-            document.getElementById('res-job-id').textContent = `JOB_ID: ${String(data.job_id).slice(0, 18)}`;
-            document.getElementById('res-time').textContent = new Date(data.timestamp).toLocaleTimeString();
+            document.getElementById('res-job-id').textContent = jid
+                ? `JOB_ID: ${jid.length > 20 ? jid.slice(0, 18) + '…' : jid}`
+                : 'JOB_ID: —';
+            document.getElementById('res-time').textContent = data.timestamp
+                ? new Date(data.timestamp).toLocaleTimeString()
+                : '—';
             document.getElementById('res-verified').textContent = data.verified ? 'Verified' : 'Not Verified';
             document.getElementById('res-verified').className = data.verified ? 'text-base font-semibold text-green-400' : 'text-base font-semibold text-amber-400';
             document.getElementById('res-validation-reason').textContent = data.validation_reason || 'No validation details available.';
-            document.getElementById('res-validation-strategy').textContent = data.validation_strategy || 'n/a';
+            const vs = data.validation_strategy;
+            document.getElementById('res-validation-strategy').textContent =
+                vs == null || vs === '' ? 'n/a' : (typeof vs === 'object' ? JSON.stringify(vs) : String(vs));
             document.getElementById('res-pubkey').textContent = data.pubkey || 'n/a';
             document.getElementById('res-signature').textContent = data.signature || 'n/a';
-            
-            statusBadge.textContent = data.status;
+
+            statusBadge.textContent = data.status != null && data.status !== '' ? String(data.status) : '—';
             statusBadge.className = data.verified
                 ? 'px-2 py-0.5 rounded-full text-[10px] bg-green-900 text-green-400 font-bold uppercase tracking-tighter'
                 : 'px-2 py-0.5 rounded-full text-[10px] bg-amber-900 text-amber-400 font-bold uppercase tracking-tighter';
-            
-            localStorage.setItem('last_result', JSON.stringify(data));
+
+            try {
+                localStorage.setItem('last_result', JSON.stringify(data));
+            } catch (e) {
+                /* Quota or stringify failure must not hide the panel */
+            }
+
+            resultPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 
         async function updateWallets() {
+            const header = document.getElementById('wallets-header');
+            const statRep = document.getElementById('stat-reputation');
+            const statusEl = document.getElementById('stat-status');
+            const contractEl = document.getElementById('contract-id-display');
+            const vaultTxFeed = document.getElementById('vault-tx-feed');
+
             try {
                 const res = await fetch('/api/vault');
-                const data = await res.json();
-                
-                // Update Header
-                const header = document.getElementById('wallets-header');
-                header.innerHTML = data.wallets.map(w => `
+                const raw = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    const msg = raw.detail || raw.message || raw.error || `HTTP ${res.status}`;
+                    header.innerHTML = `<span class="text-xs text-amber-400/90">Vault API error: ${String(msg)}</span>`;
+                    statRep.textContent = '—';
+                    statusEl.textContent = 'N/A';
+                    statusEl.className = 'text-xl font-bold text-slate-500';
+                    contractEl.textContent = '—';
+                    return;
+                }
+
+                const data = raw && typeof raw === 'object' ? raw : {};
+                const wallets = Array.isArray(data.wallets) ? data.wallets : [];
+                const transactions = Array.isArray(data.transactions) ? data.transactions : [];
+                const reg = data.registry && typeof data.registry === 'object' ? data.registry : {};
+
+                if (wallets.length === 0) {
+                    header.innerHTML = '<span class="text-xs text-slate-500">Wallets: set DEPLOYER_PUBLIC_KEY and EXECUTOR_PUBLIC_KEY in .env</span>';
+                } else {
+                    header.innerHTML = wallets.map(w => `
                     <div class="flex flex-col items-end">
                         <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">${w.name}</span>
-                        <span class="text-sm font-mono text-slate-200">${parseFloat(w.balance).toFixed(2)} <span class="text-blue-400">XLM</span></span>
+                        <span class="text-sm font-mono text-slate-200">${parseFloat(w.balance || 0).toFixed(2)} <span class="text-blue-400">XLM</span></span>
                     </div>
                 `).join('');
+                }
 
-                // Update Vault Stats
-                document.getElementById('stat-reputation').textContent = data.registry.reputation;
-                const statusEl = document.getElementById('stat-status');
-                statusEl.textContent = data.registry.active ? 'ACTIVE' : 'INACTIVE';
-                statusEl.className = data.registry.active ? 'text-xl font-bold text-green-500' : 'text-xl font-bold text-red-500';
-                document.getElementById('contract-id-display').textContent = data.registry.id;
+                if (reg.on_chain) {
+                    statRep.textContent = String(reg.reputation != null ? reg.reputation : 0);
+                    statusEl.textContent = reg.active ? 'ACTIVE' : 'INACTIVE';
+                    statusEl.className = reg.active ? 'text-xl font-bold text-green-500' : 'text-xl font-bold text-red-500';
+                } else {
+                    statRep.textContent = '—';
+                    statusEl.textContent = 'N/A';
+                    statusEl.className = 'text-xl font-bold text-slate-500';
+                }
+                const rid = reg.id != null && String(reg.id).trim() !== '' ? String(reg.id).trim() : '';
+                contractEl.textContent = rid || 'Not set — add REGISTRY_CONTRACT_ID to .env';
+                const hint = reg.hint ? String(reg.hint) : '';
+                if (hint && hint !== 'ok') {
+                    contractEl.title = hint + (reg.fetch_error ? `: ${reg.fetch_error}` : '');
+                } else {
+                    contractEl.title = '';
+                }
 
-                // Update On-chain Action Ledger
-                const vaultTxFeed = document.getElementById('vault-tx-feed');
-                // We keep session-local TXs (ones that start with 'tx_') but prepend on-chain history
                 const sessionTXs = Array.from(vaultTxFeed.children).filter(child => child.dataset.id && child.dataset.id.startsWith('tx_'));
-                
-                let historyHtml = data.transactions.map(tx => `
+
+                let historyHtml = transactions.length
+                    ? transactions.map(tx => `
                     <div class="tx-card flex justify-between items-center mb-3 opacity-80 border-slate-700">
                         <div class="flex items-center space-x-4">
                             <div class="w-8 h-8 bg-slate-800 rounded flex items-center justify-center text-slate-400">
                                 <i class="fas fa-history"></i>
                             </div>
                             <div>
-                                <div class="text-xs font-bold">Ledger Finality (${tx.account})</div>
-                                <div class="text-[10px] text-slate-500 font-mono">HASH: ${tx.hash}</div>
+                                <div class="text-xs font-bold">Ledger Finality (${tx.account || '—'})</div>
+                                <div class="text-[10px] text-slate-500 font-mono">HASH: ${tx.hash || '—'}</div>
                             </div>
                         </div>
                         <div class="text-right">
-                            <div class="text-xs font-bold text-slate-400">${tx.fee}</div>
-                            <div class="text-[10px] text-slate-600">${new Date(tx.created_at).toLocaleTimeString()}</div>
+                            <div class="text-xs font-bold text-slate-400">${tx.fee || '—'}</div>
+                            <div class="text-[10px] text-slate-600">${tx.created_at ? new Date(tx.created_at).toLocaleTimeString() : '—'}</div>
                         </div>
                     </div>
-                `).join('');
+                `).join('')
+                    : '<div class="text-xs text-slate-500 italic py-2">No Horizon transactions yet (check keys / network).</div>';
 
                 vaultTxFeed.innerHTML = historyHtml;
                 sessionTXs.forEach(stx => vaultTxFeed.prepend(stx));
 
-            } catch (err) {}
+            } catch (err) {
+                header.innerHTML = `<span class="text-xs text-amber-400/90">Vault sync failed: ${err && err.message ? err.message : String(err)}</span>`;
+                statRep.textContent = '—';
+                statusEl.textContent = 'N/A';
+                statusEl.className = 'text-xl font-bold text-slate-500';
+                contractEl.textContent = '—';
+            }
         }
 
         function updateFlowUI(state) {
@@ -849,35 +909,60 @@
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
+                let sseBuf = '';
+
+                function isTerminalJobResult(data) {
+                    if (!data || typeof data !== 'object') return false;
+                    const jid = data.job_id != null && String(data.job_id).length > 0;
+                    if (!jid) return false;
+                    if (Object.prototype.hasOwnProperty.call(data, 'phase')) return false;
+                    if (!Object.prototype.hasOwnProperty.call(data, 'output')) return false;
+                    if (data.status == null || String(data.status).length === 0) return false;
+                    return true;
+                }
+
+                function handleSsePayload(payload) {
+                    try {
+                        const data = JSON.parse(payload);
+                        if (isTerminalJobResult(data)) {
+                            showResultPanel(data);
+                            return;
+                        }
+                        if (data.line != null && String(data.line).length > 0) {
+                            if (data.line.includes('Authorization verified')) {
+                                appendTX('AUTH (x402)', '0.05 XLM', 'auth_' + Math.random().toString(36).substring(7));
+                            }
+                            if (data.line.includes('Waiting for Stellar ledger')) {
+                                statusBadge.textContent = 'Indexing...';
+                                statusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] bg-amber-900 text-amber-400 font-bold uppercase tracking-tighter animate-pulse';
+                            }
+                            if (data.line.includes('Signing execution result')) {
+                                appendTX('SIGN', '0.00000 XLM', 'sig_' + Math.random().toString(36).substring(7));
+                            }
+                            appendLog(data.line);
+                            return;
+                        }
+                    } catch (e) {}
+                }
+
+                function processSseLine(trimmedLine) {
+                    if (!trimmedLine.startsWith('data: ')) return;
+                    const rest = trimmedLine.slice(6).trim();
+                    if (rest) handleSsePayload(rest);
+                }
 
                 while (true) {
                     const { value, done } = await reader.read();
-                    if (done) break;
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-                    
-                    for (const line of lines) {
-                        const trimmedLine = line.trim();
-                        if (trimmedLine.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(trimmedLine.slice(6));
-                                if (data.line) {
-                                    if (data.line.includes('Authorization verified')) {
-                                        appendTX('AUTH (x402)', '0.05 XLM', 'auth_' + Math.random().toString(36).substring(7));
-                                    }
-                                    if (data.line.includes('Waiting for Stellar ledger')) {
-                                        statusBadge.textContent = 'Indexing...';
-                                        statusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] bg-amber-900 text-amber-400 font-bold uppercase tracking-tighter animate-pulse';
-                                    }
-                                    if (data.line.includes('Signing execution result')) {
-                                        appendTX('SIGN', '0.00000 XLM', 'sig_' + Math.random().toString(36).substring(7));
-                                    }
-                                    appendLog(data.line);
-                                } else if (data.job_id && data.status) {
-                                    showResultPanel(data);
-                                }
-                            } catch (e) {}
-                        }
+                    if (done) {
+                        const tail = sseBuf.trim();
+                        if (tail) tail.split('\n').forEach(l => processSseLine(l.replace(/\r$/, '').trim()));
+                        break;
+                    }
+                    sseBuf += decoder.decode(value, { stream: true });
+                    const parts = sseBuf.split('\n');
+                    sseBuf = parts.pop() || '';
+                    for (const line of parts) {
+                        processSseLine(line.replace(/\r$/, '').trim());
                     }
                 }
             } catch (err) {
